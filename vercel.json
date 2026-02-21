@@ -2,12 +2,7 @@
   "version": 2,
   "functions": {
     "api/index.py": {
-      "includeFiles": [
-        "api_main.py",
-        "src/**",
-        "config/**",
-        "models/production/**"
-      ]
+      "includeFiles": "{api_main.py,src/**,config/**,models/production/**}"
     }
   },
   "rewrites": [
