@@ -1,0 +1,77 @@
+# Simplified Configuration for Single Model Training
+
+# Data Configuration
+data:
+  raw_data_path: "data/raw/AmesHousing.csv"
+  # processed_data_path: "data/processed/"
+  target_column: "SalePrice"
+  test_size: 0.2
+  val_size: 0.1
+  random_state: 42
+
+# # Data Quality Checks
+# data_quality:
+#   max_missing_pct: 20      # Stop if column has >20% missing
+#   min_variance: 0.01       # Stop if variance <0.01
+#   min_correlation: 0.05    # Stop if |correlation| <0.05
+#   stop_on_failure: true    # true = raise error, false = warn
+
+# Feature Selection (Manual from your EDA)
+features:
+  numeric:
+    # - 'Lot Area'
+    # - 'Total Bsmt SF'
+    # - '1st Flr SF'
+    # - '2nd Flr SF'
+    # - 'Gr Liv Area'
+    # - 'Garage Area'
+    - "Overall Qual"
+    - "Overall Cond"
+    - "Year Built"
+    - "Year Remod/Add"
+    - "Bedroom AbvGr"
+    - "Full Bath"
+    # - 'Half Bath'
+    # - 'TotRms AbvGrd'
+    # - 'Fireplaces'
+    # - 'Garage Cars'
+
+  categorical:
+    - "Neighborhood"
+    - "MS Zoning"
+    - "Bldg Type"
+    # - 'House Style'
+    # - 'Foundation'
+    # - 'Central Air'
+    # - 'Garage Type'
+
+  # exclude:
+  #   - 'Order'
+  #   - 'PID'
+
+# Preprocessing Configuration
+preprocessing:
+  handle_missing: "mean"
+  scale_features: true
+  scaling_method: "standard"
+  encode_categorical: true
+  encoding_method: "onehot"
+
+# Model Configuration (Gradient Boosting only)
+model:
+  model_type: "gradient_boosting"
+  random_state: 42
+
+  hyperparameters:
+    n_estimators: 100
+    learning_rate: 0.1
+    max_depth: 5
+    min_samples_split: 2
+    min_samples_leaf: 1
+    subsample: 0.8
+
+# Training Configuration
+training:
+  experiment_name: "house_price_prediction_test_2"
+  run_name: "baseline_gradient_boosting"
+  model_output_dir: "models/production"

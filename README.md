@@ -71,7 +71,7 @@ housing_price_predictor/
 │       ├── training_pipeline.py    # Modular script handle training pipeline: load, cleaning, split, features engineer, & train
 │       ├── inference_pipeline.py   # Modular script handle inference pipeline
 │      
-├── scripts/                        # Operational scripts (training runs, tuning, utilities)
+├── pipelines/                        # Operational scripts (training runs, tuning, utilities)
 │   └── fine_tune.py                # Modular script handle fine-tune/ hyperparameter search
 │
 │
@@ -82,7 +82,7 @@ housing_price_predictor/
 │       ├── config.yaml
 │       └── metadata.json
 │
-├── notebook/                       # EDA for understanding data
+├── notebooks/                       # EDA for understanding data
 │   ├── EDA.ipynb
 │   └── Model_Exploration.ipynb     # EDA for understanding model baseline
 │
@@ -91,7 +91,6 @@ housing_price_predictor/
 │   ├── WORKFLOW_DIAGRAM.md
 │   └── QUICK_REFERENCE.txt
 │
-├── predict.py
 ├── requirements.txt                # Python dependencies            
 ```
 
@@ -268,7 +267,7 @@ This project focuses on **engineering discipline**, not just accuracy:
 
 Concise workflow I use:
 - Create a new Space on Hugging Face and choose the **Docker** for deployment method.
-- Create a fresh branch for deployment and keep only runtime essentials (`app.py`, `models/production`, `config`, `requirements.txt`, etc.).
+- Create a fresh branch for deployment and keep only runtime essentials (`serving/app/streamlit_app.py`, `models/production`, `conf`, `requirements.txt`, etc.).
 - Add the Space repo as a remote, then push the deployment branch.
 
 ```bash
@@ -279,7 +278,7 @@ git push hf deploy-hf:main
 
 Notes:
 - The Space build uses `requirements.txt` at the repo root.
-- The Streamlit entrypoint should be `app.py` at the repo root.
+- The Streamlit entrypoint should be `serving/app/streamlit_app.py`.
 
 ---
 

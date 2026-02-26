@@ -44,7 +44,7 @@ Before running the application, ensure you have:
    - `preprocessor.pkl`
    - `metadata.json`
    - `config.yaml`
-3. **Configuration File** in `config/config.yaml`
+3. **Configuration File** in `conf/config.yaml`
 
 ## 📦 Installation
 
@@ -87,7 +87,7 @@ pip install streamlit==1.29.0 plotly==5.18.0 pandas==2.0.3 numpy==1.24.4 scikit-
 ### Standard Method
 
 ```bash
-streamlit run app.py
+streamlit run serving/app/streamlit_app.py
 ```
 
 The app will automatically open in your default web browser at `http://localhost:8501`
@@ -95,19 +95,19 @@ The app will automatically open in your default web browser at `http://localhost
 ### Custom Port
 
 ```bash
-streamlit run app.py --server.port 8080
+streamlit run serving/app/streamlit_app.py --server.port 8080
 ```
 
 ### Run Without Auto-Opening Browser
 
 ```bash
-streamlit run app.py --server.headless true
+streamlit run serving/app/streamlit_app.py --server.headless true
 ```
 
 ### For Production Deployment
 
 ```bash
-streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+streamlit run serving/app/streamlit_app.py --server.address 0.0.0.0 --server.port 8501
 ```
 
 ## 📖 Using the Application
@@ -115,7 +115,7 @@ streamlit run app.py --server.address 0.0.0.0 --server.port 8501
 ### Step-by-Step Guide
 
 #### 1. **Launch the Application**
-   - Run `streamlit run app.py`
+   - Run `streamlit run serving/app/streamlit_app.py`
    - Wait for the browser to open automatically
    - Or navigate to `http://localhost:8501`
 
@@ -209,7 +209,7 @@ Location & Style Tab:
 ## 🏗️ Application Structure
 
 ```
-app.py
+serving/app/streamlit_app.py
 ├── Page Configuration
 ├── Custom CSS Styling
 ├── Helper Functions
@@ -266,7 +266,7 @@ Error: Required file not found: models/production/model.pkl
 ```
 **Solution**: Ensure you've trained the model first:
 ```bash
-python src/pipelines/training_pipeline.py
+python pipelines/run_training.py
 ```
 
 #### 2. **"Module not found" errors**
@@ -284,7 +284,7 @@ OSError: [Errno 48] Address already in use
 ```
 **Solution**: Use a different port:
 ```bash
-streamlit run app.py --server.port 8502
+streamlit run serving/app/streamlit_app.py --server.port 8502
 ```
 
 #### 4. **Validation errors persist**
@@ -323,7 +323,7 @@ If the app is slow:
 
 Run in debug mode for detailed logs:
 ```bash
-streamlit run app.py --logger.level=debug
+streamlit run serving/app/streamlit_app.py --logger.level=debug
 ```
 
 ## 📊 Model Information
@@ -363,7 +363,7 @@ For production deployment:
 
 ### Local Development
 ```bash
-streamlit run app.py
+streamlit run serving/app/streamlit_app.py
 ```
 
 ### Streamlit Cloud (Free)
@@ -379,7 +379,7 @@ COPY requirements_updated.txt .
 RUN pip install -r requirements_updated.txt
 COPY . .
 EXPOSE 8501
-CMD ["streamlit", "run", "app.py"]
+CMD ["streamlit", "run", "serving/app/streamlit_app.py"]
 ```
 
 ### Heroku

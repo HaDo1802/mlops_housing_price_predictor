@@ -4,7 +4,7 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 
-SRC := src app.py predict.py
+SRC := src serving pipelines conf
 TEST_DIR := tests
 
 .PHONY: help install lint format test clean all vercel-preview vercel-prod
@@ -15,6 +15,8 @@ help:
 	@printf "  lint     Run flake8\\n"
 	@printf "  format   Run black + isort\\n"
 	@printf "  test     Run pytest if a test dir exists\\n"
+	@printf "  api      Run FastAPI locally\\n"
+	@printf "  ui       Run Streamlit locally\\n"
 	@printf "  vercel-preview Deploy FastAPI to Vercel preview\\n"
 	@printf "  vercel-prod    Deploy FastAPI to Vercel production\\n"
 	
@@ -31,6 +33,12 @@ format:
 
 test:
 	@if [ -n "$(TEST_DIR)" ]; then $(PYTHON) -m pytest $(TEST_DIR) -v; else echo "No test/ or tests/ directory found."; fi
+
+api:
+	$(PYTHON) -m uvicorn serving.api.main:app --host 0.0.0.0 --port 8000
+
+ui:
+	$(PYTHON) -m streamlit run serving/app/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
 
 
 all: install format lint test

@@ -1,0 +1,5 @@
+handle_missing: "mean"
+scale_features: true
+scaling_method: "standard"
+encode_categorical: true
+encoding_method: "onehot"
