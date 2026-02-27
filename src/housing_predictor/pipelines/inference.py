@@ -16,6 +16,11 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+LEGACY_MODULE_MAP = {
+    "src.features_engineer.preprocessor": "housing_predictor.features.preprocessor",
+    "src.housing_predictor.features.preprocessor": "housing_predictor.features.preprocessor",
+}
+
 # Local artifact directory (used when MLflow is unavailable)
 # src/housing_predictor/pipelines/inference.py -> project root is parents[3]
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -122,8 +127,7 @@ class InferencePipeline:
         run_id = self.model_version_info.run_id
         artifact_uri = f"runs:/{run_id}/{artifact_name}"
         local_path = mlflow.artifacts.download_artifacts(artifact_uri=artifact_uri)
-        with open(local_path, "rb") as f:
-            return pickle.load(f)
+        return _load_pickle_with_compat(Path(local_path))
 
     def _download_run_metadata(self) -> Dict:
         """Download metadata.json from an MLflow run."""
@@ -147,13 +151,11 @@ class InferencePipeline:
                 "Make sure models/production/model.pkl exists in the deployment."
             )
 
-        with open(model_path, "rb") as f:
-            self.model = pickle.load(f)
+        self.model = _load_pickle_with_compat(model_path)
         logger.info("Model loaded from %s", model_path)
 
         if preprocessor_path.exists():
-            with open(preprocessor_path, "rb") as f:
-                self.preprocessor = pickle.load(f)
+            self.preprocessor = _load_pickle_with_compat(preprocessor_path)
             logger.info("Preprocessor loaded from %s", preprocessor_path)
         else:
             raise FileNotFoundError(f"Preprocessor not found: {preprocessor_path}")
@@ -292,6 +294,26 @@ class _LocalVersionStub:
         self.source = str(model_dir)
         self.tags = {}
         self.status = "READY"
+
+
+class _CompatUnpickler(pickle.Unpickler):
+    """Unpickler that remaps legacy module paths to current package paths."""
+
+    def find_class(self, module, name):
+        module = LEGACY_MODULE_MAP.get(module, module)
+        return super().find_class(module, name)
+
+
+def _load_pickle_with_compat(path: Path):
+    """Load pickle file, retrying with legacy module path remapping when needed."""
+    with open(path, "rb") as f:
+        try:
+            return pickle.load(f)
+        except ModuleNotFoundError as exc:
+            if "src." not in str(exc):
+                raise
+    with open(path, "rb") as f:
+        return _CompatUnpickler(f).load()
 
 
 if __name__ == "__main__":
