@@ -9,7 +9,11 @@ router = APIRouter(prefix="/model", tags=["Model"])
 async def model_info(request: Request):
     pipeline = request.app.state.inference_pipeline
     if pipeline is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        load_error = getattr(request.app.state, "model_load_error", None)
+        detail = "Model not loaded"
+        if load_error:
+            detail = f"{detail}: {load_error}"
+        raise HTTPException(status_code=503, detail=detail)
 
     return {
         "model_type": pipeline.metadata.get("model_type"),

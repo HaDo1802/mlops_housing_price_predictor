@@ -12,8 +12,10 @@ async def health(request: Request):
     pipeline = request.app.state.inference_pipeline
     loaded = pipeline is not None
     version = pipeline.metadata.get("model_type", "unknown") if loaded else None
+    load_error = None if loaded else getattr(request.app.state, "model_load_error", None)
     return HealthResponse(
         status="healthy" if loaded else "unhealthy",
         model_loaded=loaded,
         model_version=version,
+        load_error=load_error,
     )

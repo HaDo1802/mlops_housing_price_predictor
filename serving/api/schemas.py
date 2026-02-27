@@ -64,3 +64,4 @@ class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
     model_version: Optional[str] = None
+    load_error: Optional[str] = None

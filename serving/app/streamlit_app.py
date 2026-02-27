@@ -42,7 +42,10 @@ from housing_predictor.monitoring.feedback_collector import save_feedback_record
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
+from dotenv import load_dotenv
+
+load_dotenv(PROJECT_ROOT / ".env")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://realestatepredictor.vercel.app").rstrip("/")
 
 
 # Page configuration
@@ -727,9 +730,15 @@ def main():
         health = fetch_api_health()
         if health is None:
             st.error("API is unreachable. Start FastAPI or fix `API_BASE_URL`.")
+            model_info = None
         elif not health.get("model_loaded", False):
             st.warning("API is running, but model is not loaded on startup.")
-        model_info = fetch_model_info()
+            load_error = health.get("load_error")
+            if load_error:
+                st.caption(f"Load error: {load_error}")
+            model_info = None
+        else:
+            model_info = fetch_model_info()
         if model_info:
             st.info(f"Model: {model_info.get('model_type', 'unknown')}")
             features = model_info.get("features", {}).get("count")

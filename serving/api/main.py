@@ -44,14 +44,26 @@ async def root():
 
 @app.on_event("startup")
 async def startup_event():
-    try:
-        app.state.inference_pipeline = InferencePipeline(
-            model_name="housing_price_predictor", stage="Production"
-        )
-        logger.info("Inference pipeline loaded")
-    except Exception as exc:
-        logger.error("Failed to load pipeline: %s", exc)
-        app.state.inference_pipeline = None
+    model_name = "housing_price_predictor"
+    stage_candidates = ["Production", "Staging"]
+    app.state.model_load_error = None
+
+    for stage in stage_candidates:
+        try:
+            app.state.inference_pipeline = InferencePipeline(model_name=model_name, stage=stage)
+            logger.info("Inference pipeline loaded (model=%s, stage=%s)", model_name, stage)
+            return
+        except Exception as exc:
+            app.state.model_load_error = str(exc)
+            logger.warning(
+                "Failed to load pipeline (model=%s, stage=%s): %s",
+                model_name,
+                stage,
+                exc,
+            )
+
+    app.state.inference_pipeline = None
+    logger.error("Failed to load inference pipeline for all stage candidates: %s", stage_candidates)
 
 
 @app.exception_handler(Exception)
