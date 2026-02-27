@@ -4,9 +4,9 @@ from mlflow.tracking import MlflowClient
 
 # Set these values directly before running this script.
 MODEL_NAME = "housing_price_predictor"
-VERSION: str | None = None
-STAGE: str | None = None  # One of: "Staging", "Production", "Archived"
-LIST_ONLY = True
+VERSION= 11 #str | None = None
+STAGE = "Production"#str | None = None  # One of: "Staging", "Production", "Archived"
+LIST_ONLY = False
 
 
 def list_models(client: MlflowClient, model_name: str | None = None) -> None:
