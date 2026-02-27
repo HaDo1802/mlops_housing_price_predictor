@@ -57,4 +57,5 @@ hyperparameters:
 training:
   experiment_name: "house_price_prediction_test_2"
   run_name: "test_different model"
+  registry_model_name: "housing_price_predictor"
   model_output_dir: "models/production"

@@ -40,6 +40,7 @@ class ModelConfig:
 class TrainingConfig:
     experiment_name: str = "house_price_prediction"
     run_name: str = "run_001"
+    registry_model_name: str = "housing_price_predictor"
     log_metrics: bool = True
     save_artifacts: bool = True
     track_experiments: bool = True
@@ -81,7 +82,7 @@ class ConfigManager:
         base_dir = root / "base"
         env_name = self.env or "local"
 
-        # Step 1: load base config  
+        # Step 1: load base config
         cfg = {
             "data": self._load_yaml(base_dir / "data.yaml"),
             "features": self._load_yaml(base_dir / "features.yaml"),

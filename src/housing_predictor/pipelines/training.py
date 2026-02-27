@@ -45,9 +45,7 @@ class TrainingPipeline:
             random_state=self.config.model.random_state,
         )
         self.registry = ModelRegistryManager(
-            registry_model_name=getattr(
-                self.config.training, "registry_model_name", "housing_price_predictor"
-            )
+            registry_model_name=self.config.training.registry_model_name
         )
 
         self.metrics = None
