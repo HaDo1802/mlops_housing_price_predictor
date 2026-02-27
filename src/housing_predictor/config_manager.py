@@ -81,16 +81,22 @@ class ConfigManager:
         base_dir = root / "base"
         env_name = self.env or "local"
 
+        # Step 1: load base config  
         cfg = {
             "data": self._load_yaml(base_dir / "data.yaml"),
-            "features": self._load_yaml(root / "config.yaml").get("features", {}),
+            "features": self._load_yaml(base_dir / "features.yaml"),
             "preprocessing": self._load_yaml(base_dir / "preprocessing.yaml"),
             "model": self._load_yaml(base_dir / "model.yaml"),
             "training": self._load_yaml(base_dir / "training.yaml"),
         }
-
+        # Step 2: override with environment-specific values
         env_data = self._load_yaml(root / env_name / "data.yaml")
         cfg["data"].update(env_data)
+        # Step 3: override with whatever is in config.yaml  ← THIS WAS MISSING
+        main_config = self._load_yaml(root / "config.yaml")
+        for section in ["data", "features", "preprocessing", "model", "training"]:
+            if section in main_config and main_config[section]:
+                cfg[section].update(main_config[section])
         return cfg
 
     def _load_config(self) -> MLConfig:

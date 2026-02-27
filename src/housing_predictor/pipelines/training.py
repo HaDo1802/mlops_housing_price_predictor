@@ -15,7 +15,7 @@ from housing_predictor.data.splitter import DataSplitter
 from housing_predictor.features.preprocessor import ProductionPreprocessor
 from housing_predictor.models.evaluator import regression_metrics
 from housing_predictor.models.registry import ModelRegistryManager
-from housing_predictor.models.trainer import GradientBoostingTrainer
+from housing_predictor.models.trainer import ModelTrainer
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,8 @@ class TrainingPipeline:
             encoding_method=self.config.preprocessing.encoding_method,
             verbose=True,
         )
-        self.trainer = GradientBoostingTrainer(
+        self.trainer = ModelTrainer(
+            model_type=self.config.model.model_type,  # now actually used
             hyperparameters=self.config.model.hyperparameters,
             random_state=self.config.model.random_state,
         )
@@ -87,7 +88,8 @@ class TrainingPipeline:
 
     def _build_metadata(self) -> dict:
         return {
-            "model_type": "GradientBoostingRegressor",
+            "model_type": type(self.trainer.model).__name__,
+            "model_key": self.config.model.model_type,
             "hyperparameters": self.config.model.hyperparameters,
             "test_metrics": self.metrics["test"],
             "val_metrics": self.metrics["validation"],
@@ -132,7 +134,8 @@ class TrainingPipeline:
                     **self.config.model.hyperparameters,
                 }
             )
-            mlflow.set_tag("model_type", "GradientBoostingRegressor")
+            mlflow.set_tag("model_type", type(self.trainer.model).__name__)
+            mlflow.set_tag("model_key", self.config.model.model_type)
             mlflow.set_tag("project", "house_price_prediction")
             mlflow.set_tag("training_date", datetime.now(timezone.utc).isoformat())
             mlflow.set_tag("git_commit", self.registry.get_git_commit())
