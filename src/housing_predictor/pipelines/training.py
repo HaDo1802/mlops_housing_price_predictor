@@ -96,26 +96,44 @@ class TrainingPipeline:
         self.X_val_transformed = self.preprocessor.transform(self.X_val)
         self.X_test_transformed = self.preprocessor.transform(self.X_test)
 
+    @staticmethod
+    def _compute_price_weights(y) -> np.ndarray:
+        """
+        Upweight cheaper homes so training loss pays more attention to that segment.
+        """
+        y_arr = np.asarray(y, dtype=float)
+        y_nonneg = np.maximum(y_arr, 0.0)
+        median_price = float(np.median(y_nonneg))
+        base = (median_price + 1.0) / (y_nonneg + 1.0)
+        weights = np.sqrt(base)
+        return np.clip(weights, 0.5, 3.0)
+
     def train_and_eval(self):
-        self.model = self.trainer.fit(self.X_train_transformed, self.y_train)
+        train_weights = self._compute_price_weights(self.y_train)
+        self.model = self.trainer.fit(
+            self.X_train_transformed, self.y_train, sample_weight=train_weights
+        )
         test_pred = self.model.predict(self.X_test_transformed)
         val_pred = self.model.predict(self.X_val_transformed)
-        residuals = np.asarray(self.y_val) - np.asarray(val_pred)
+        y_val = np.asarray(self.y_val, dtype=float)
+        pred_val = np.asarray(val_pred, dtype=float)
+        pred_val_nonneg = np.maximum(pred_val, 0.0)
+        log_residuals = np.log1p(y_val) - np.log1p(pred_val_nonneg)
         alpha = 0.05
         coverage = float(1 - alpha)
-        calibration_size = int(len(residuals))
+        calibration_size = int(len(log_residuals))
         dof = max(calibration_size - 2, 1)
-        sum_errs = float(np.sum(np.square(residuals)))
+        sum_errs = float(np.sum(np.square(log_residuals)))
         stdev = float(np.sqrt(sum_errs / dof))
         z_score = float(NormalDist().inv_cdf(1 - alpha / 2))
         interval = float(z_score * stdev)
         self.prediction_interval = {
-            "method": "gaussian_symmetric_residual_std",
+            "method": "lognormal_symmetric_residual_std",
             "alpha": alpha,
             "coverage": coverage,
-            "stdev_residual": stdev,
+            "stdev_log_residual": stdev,
             "z_score": z_score,
-            "interval_half_width": interval,
+            "interval_half_width_log": interval,
             "degrees_of_freedom": int(dof),
             "calibration_size": calibration_size,
         }
@@ -123,6 +141,19 @@ class TrainingPipeline:
             "test": regression_metrics(self.y_test, test_pred),
             "validation": regression_metrics(self.y_val, val_pred),
         }
+        cheap_cutoff = float(np.percentile(np.asarray(self.y_test, dtype=float), 25))
+        cheap_mask = np.asarray(self.y_test, dtype=float) <= cheap_cutoff
+        if np.any(cheap_mask):
+            cheap_mae = float(
+                np.mean(
+                    np.abs(
+                        np.asarray(self.y_test, dtype=float)[cheap_mask]
+                        - test_pred[cheap_mask]
+                    )
+                )
+            )
+            self.metrics["test"]["cheap_segment_cutoff_p25"] = cheap_cutoff
+            self.metrics["test"]["cheap_segment_mae"] = cheap_mae
 
     def _build_metadata(self) -> dict:
         inner_model = self.trainer.get_inner_model()
@@ -211,9 +242,12 @@ class TrainingPipeline:
                     "test_mae": self.metrics["test"]["mae"],
                     "val_r2": self.metrics["validation"]["r2"],
                     "val_rmse": self.metrics["validation"]["rmse"],
-                    "prediction_interval_half_width": self.prediction_interval[
-                        "interval_half_width"
+                    "prediction_interval_log_half_width": self.prediction_interval[
+                        "interval_half_width_log"
                     ],
+                    "test_cheap_segment_mae": self.metrics["test"].get(
+                        "cheap_segment_mae", np.nan
+                    ),
                 }
             )
 

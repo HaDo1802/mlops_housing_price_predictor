@@ -14,16 +14,18 @@
     "tree_method": "hist"
   },
   "test_metrics": {
-    "r2": 0.9527656179658296,
-    "rmse": 530338.2054834926,
-    "mae": 203922.16821732954,
-    "mse": 281258612195.4512
+    "r2": 0.9131824781750413,
+    "rmse": 718997.6787216541,
+    "mae": 229128.71017400568,
+    "mse": 516957662007.127,
+    "cheap_segment_cutoff_p25": 380000.0,
+    "cheap_segment_mae": 70414.07380756579
   },
   "val_metrics": {
-    "r2": 0.9277740036926192,
-    "rmse": 292916.3724757611,
-    "mae": 148638.87204367897,
-    "mse": 85800001264.35881
+    "r2": 0.8420806992543893,
+    "rmse": 433126.22733606765,
+    "mae": 183915.12475142046,
+    "mse": 187598328806.37497
   },
   "feature_names": [
     "bedrooms",
@@ -48,12 +50,12 @@
     "vegas_district_Winchester"
   ],
   "prediction_interval": {
-    "method": "gaussian_symmetric_residual_std",
+    "method": "lognormal_symmetric_residual_std",
     "alpha": 0.05,
     "coverage": 0.95,
-    "stdev_residual": 295616.11961573025,
+    "stdev_log_residual": 0.5681888548558126,
     "z_score": 1.9599639845400536,
-    "interval_half_width": 579396.9476963157,
+    "interval_half_width_log": 1.1136296919344486,
     "degrees_of_freedom": 108,
     "calibration_size": 110
   },

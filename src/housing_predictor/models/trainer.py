@@ -85,8 +85,16 @@ class ModelTrainer:
                 ) from exc
         return None
 
-    def fit(self, X_train, y_train):
-        self.model.fit(X_train, y_train)
+    def fit(self, X_train, y_train, sample_weight=None):
+        fit_kwargs = {}
+        if sample_weight is not None:
+            fit_kwargs["sample_weight"] = sample_weight
+        try:
+            self.model.fit(X_train, y_train, **fit_kwargs)
+        except TypeError:
+            # Backward compatibility for estimators/wrappers that do not
+            # accept sample_weight in fit().
+            self.model.fit(X_train, y_train)
         return self.model
 
     def predict(self, X):

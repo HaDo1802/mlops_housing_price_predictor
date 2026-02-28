@@ -205,6 +205,14 @@ class InferencePipeline:
             if interval > 0:
                 delta = np.full_like(preds, interval, dtype=float)
                 return preds, -delta, delta
+        if interval_cfg.get("method") == "lognormal_symmetric_residual_std":
+            interval_log = float(interval_cfg.get("interval_half_width_log", 0.0))
+            if interval_log > 0:
+                pred_nonneg = np.maximum(preds, 0.0)
+                pred_plus_1 = pred_nonneg + 1.0
+                lower_abs = np.maximum(0.0, pred_plus_1 * np.exp(-interval_log) - 1.0)
+                upper_abs = pred_plus_1 * np.exp(interval_log) - 1.0
+                return preds, lower_abs - preds, upper_abs - preds
 
         base_estimator = self._unwrap_model_estimator()
         if hasattr(base_estimator, "estimators_"):
