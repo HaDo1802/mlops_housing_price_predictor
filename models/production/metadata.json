@@ -43,6 +43,13 @@
     "vegas_district_The Strip",
     "vegas_district_Winchester"
   ],
+  "prediction_interval": {
+    "method": "conformal_symmetric_abs_residual",
+    "alpha": 0.05,
+    "coverage": 0.95,
+    "quantile_abs_error": 512317.1034608589,
+    "calibration_size": 110
+  },
   "train_size": 766,
   "val_size": 110,
   "test_size": 220

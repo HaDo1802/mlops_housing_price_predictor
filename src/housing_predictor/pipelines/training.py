@@ -8,6 +8,7 @@ from pathlib import Path
 
 import mlflow
 import mlflow.sklearn
+import numpy as np
 from mlflow.tracking import MlflowClient
 
 from housing_predictor.config_manager import ConfigManager
@@ -57,6 +58,7 @@ class TrainingPipeline:
         )
 
         self.metrics = None
+        self.prediction_interval = None
 
     @staticmethod
     def _log_step(step: str) -> None:
@@ -97,6 +99,16 @@ class TrainingPipeline:
         self.model = self.trainer.fit(self.X_train_transformed, self.y_train)
         test_pred = self.model.predict(self.X_test_transformed)
         val_pred = self.model.predict(self.X_val_transformed)
+        abs_errors = np.abs(np.asarray(self.y_val) - np.asarray(val_pred))
+        alpha = 0.05
+        quantile = float(np.quantile(abs_errors, 1 - alpha, method="higher"))
+        self.prediction_interval = {
+            "method": "conformal_symmetric_abs_residual",
+            "alpha": alpha,
+            "coverage": float(1 - alpha),
+            "quantile_abs_error": quantile,
+            "calibration_size": int(len(abs_errors)),
+        }
         self.metrics = {
             "test": regression_metrics(self.y_test, test_pred),
             "validation": regression_metrics(self.y_val, val_pred),
@@ -112,6 +124,7 @@ class TrainingPipeline:
             "test_metrics": self.metrics["test"],
             "val_metrics": self.metrics["validation"],
             "feature_names": self.preprocessor.get_feature_names(),
+            "prediction_interval": self.prediction_interval,
             "train_size": len(self.X_train),
             "val_size": len(self.X_val),
             "test_size": len(self.X_test),
@@ -188,6 +201,9 @@ class TrainingPipeline:
                     "test_mae": self.metrics["test"]["mae"],
                     "val_r2": self.metrics["validation"]["r2"],
                     "val_rmse": self.metrics["validation"]["rmse"],
+                    "prediction_interval_q95": self.prediction_interval[
+                        "quantile_abs_error"
+                    ],
                 }
             )
 

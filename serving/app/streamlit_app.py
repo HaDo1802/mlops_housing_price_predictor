@@ -453,7 +453,9 @@ def create_input_form(
     return inputs, numeric_features + categorical_features
 
 
-def display_prediction_results(prediction, lower, upper, top_features):
+def display_prediction_results(
+    prediction, lower, upper, top_features, confidence_level: float = 95.0
+):
     """Display prediction results in a professional format"""
 
     st.markdown("---")
@@ -496,7 +498,7 @@ def display_prediction_results(prediction, lower, upper, top_features):
                     f"${lower:,.0f}",
                     f"${upper:,.0f}",
                     f"${margin:,.0f} (±{margin_pct:.1f}%)",
-                    "95%",
+                    f"{confidence_level:.1f}%",
                 ],
             }
         )
@@ -594,7 +596,7 @@ def display_prediction_results(prediction, lower, upper, top_features):
     <div class="info-box">
         <strong>💡 How to interpret these results:</strong><br>
         • The predicted sale price is <strong>${prediction:,.0f}</strong><br>
-        • We are 95% confident the actual price will be between <strong>${lower:,.0f}</strong> and <strong>${upper:,.0f}</strong><br>
+        • We are {confidence_level:.1f}% confident the actual price will be between <strong>${lower:,.0f}</strong> and <strong>${upper:,.0f}</strong><br>
         • The top 5 features shown above had the most influence on this prediction<br>
         • The margin of error is <strong>±${margin:,.0f}</strong> ({margin_pct:.1f}%)
     </div>
@@ -748,8 +750,13 @@ def main():
             features = model_info.get("features", {}).get("count")
             if features is not None:
                 st.info(f"Features: {features}")
+            interval_cfg = model_info.get("prediction_interval") or {}
+            st.session_state.confidence_level = float(
+                interval_cfg.get("coverage", 0.95) * 100
+            )
         else:
             st.warning("Model info unavailable. Using local fallback feature schema.")
+            st.session_state.confidence_level = 95.0
 
         st.markdown("---")
         st.markdown("**Need Help?**")
@@ -892,6 +899,7 @@ def main():
             result["lower"],
             result["upper"],
             result["top_features"],
+            st.session_state.get("confidence_level", 95.0),
         )
 
         # Success message

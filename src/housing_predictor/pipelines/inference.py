@@ -194,6 +194,13 @@ class InferencePipeline:
         preds = self.predict(X)
         X_t = self.preprocessor.transform(X)
 
+        interval_cfg = self.metadata.get("prediction_interval") or {}
+        if interval_cfg.get("method") == "conformal_symmetric_abs_residual":
+            q = float(interval_cfg.get("quantile_abs_error", 0.0))
+            if q > 0:
+                delta = np.full_like(preds, q, dtype=float)
+                return preds, -delta, delta
+
         base_estimator = self._unwrap_model_estimator()
         if hasattr(base_estimator, "estimators_"):
             est = base_estimator.estimators_

@@ -44,6 +44,7 @@ async def model_info(request: Request):
             "test": pipeline.metadata.get("test_metrics"),
             "validation": pipeline.metadata.get("val_metrics"),
         },
+        "prediction_interval": pipeline.metadata.get("prediction_interval"),
         "features": {
             "count": len(raw_feature_names),
             "names": raw_feature_names,
