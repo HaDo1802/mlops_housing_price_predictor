@@ -48,10 +48,13 @@
     "vegas_district_Winchester"
   ],
   "prediction_interval": {
-    "method": "conformal_symmetric_abs_residual",
+    "method": "gaussian_symmetric_residual_std",
     "alpha": 0.05,
     "coverage": 0.95,
-    "quantile_abs_error": 523535.3125,
+    "stdev_residual": 295616.11961573025,
+    "z_score": 1.9599639845400536,
+    "interval_half_width": 579396.9476963157,
+    "degrees_of_freedom": 108,
     "calibration_size": 110
   },
   "train_size": 766,

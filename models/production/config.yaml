@@ -1,28 +1,34 @@
+# Simplified Configuration for Single Model Training
+
+# Data Configuration
 data:
-  raw_data_path: data/raw/data_master.csv
-  target_column: price
+  raw_data_path: "data/raw/data_master.csv"
+  target_column: "price"
   test_size: 0.2
   val_size: 0.1
   random_state: 42
+
 features:
   numeric:
-  - bedrooms
-  - bathrooms
-  - livingarea
+    - "bedrooms"
+    - "bathrooms"
+    - "livingarea"
+
   categorical:
-  - propertytype
-  - vegas_district
+    - "propertytype"
+    - "vegas_district"
+
+# Preprocessing Configuration
 preprocessing:
-  handle_missing: mean
-  handle_outliers: true
-  outlier_method: iqr
+  handle_missing: "mean"
   scale_features: true
-  scaling_method: standard
+  scaling_method: "standard"
   encode_categorical: true
-  encoding_method: onehot
-  target_transform: log1p
+  encoding_method: "onehot"
+  target_transform: "log1p"
+
 model:
-  model_type: xgboost
+  model_type: "xgboost"
   random_state: 42
   hyperparameters:
     n_estimators: 1200
@@ -32,16 +38,12 @@ model:
     subsample: 0.9
     colsample_bytree: 0.9
     reg_lambda: 1.0
-    objective: reg:squarederror
-    tree_method: hist
-  cv_folds: 5
-  optimize_metric: r2
+    objective: "reg:squarederror"
+    tree_method: "hist"
+
+# Training Configuration
 training:
-  experiment_name: house_price_prediction_test_2
-  run_name: xgb_no_geo_tuned
-  registry_model_name: housing_price_predictor
-  log_metrics: true
-  save_artifacts: true
-  track_experiments: true
-  model_output_dir: models/production
-  log_dir: logs
+  experiment_name: "house_price_prediction_test_2"
+  run_name: "xgb_no_geo_tuned"
+  registry_model_name: "housing_price_predictor"
+  model_output_dir: "models/production"

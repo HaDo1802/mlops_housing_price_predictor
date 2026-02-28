@@ -5,6 +5,7 @@ import logging
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import NormalDist
 
 import mlflow
 import mlflow.sklearn
@@ -99,15 +100,24 @@ class TrainingPipeline:
         self.model = self.trainer.fit(self.X_train_transformed, self.y_train)
         test_pred = self.model.predict(self.X_test_transformed)
         val_pred = self.model.predict(self.X_val_transformed)
-        abs_errors = np.abs(np.asarray(self.y_val) - np.asarray(val_pred))
+        residuals = np.asarray(self.y_val) - np.asarray(val_pred)
         alpha = 0.05
-        quantile = float(np.quantile(abs_errors, 1 - alpha, method="higher"))
+        coverage = float(1 - alpha)
+        calibration_size = int(len(residuals))
+        dof = max(calibration_size - 2, 1)
+        sum_errs = float(np.sum(np.square(residuals)))
+        stdev = float(np.sqrt(sum_errs / dof))
+        z_score = float(NormalDist().inv_cdf(1 - alpha / 2))
+        interval = float(z_score * stdev)
         self.prediction_interval = {
-            "method": "conformal_symmetric_abs_residual",
+            "method": "gaussian_symmetric_residual_std",
             "alpha": alpha,
-            "coverage": float(1 - alpha),
-            "quantile_abs_error": quantile,
-            "calibration_size": int(len(abs_errors)),
+            "coverage": coverage,
+            "stdev_residual": stdev,
+            "z_score": z_score,
+            "interval_half_width": interval,
+            "degrees_of_freedom": int(dof),
+            "calibration_size": calibration_size,
         }
         self.metrics = {
             "test": regression_metrics(self.y_test, test_pred),
@@ -201,8 +211,8 @@ class TrainingPipeline:
                     "test_mae": self.metrics["test"]["mae"],
                     "val_r2": self.metrics["validation"]["r2"],
                     "val_rmse": self.metrics["validation"]["rmse"],
-                    "prediction_interval_q95": self.prediction_interval[
-                        "quantile_abs_error"
+                    "prediction_interval_half_width": self.prediction_interval[
+                        "interval_half_width"
                     ],
                 }
             )

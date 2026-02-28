@@ -200,6 +200,11 @@ class InferencePipeline:
             if q > 0:
                 delta = np.full_like(preds, q, dtype=float)
                 return preds, -delta, delta
+        if interval_cfg.get("method") == "gaussian_symmetric_residual_std":
+            interval = float(interval_cfg.get("interval_half_width", 0.0))
+            if interval > 0:
+                delta = np.full_like(preds, interval, dtype=float)
+                return preds, -delta, delta
 
         base_estimator = self._unwrap_model_estimator()
         if hasattr(base_estimator, "estimators_"):
