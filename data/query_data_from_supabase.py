@@ -63,7 +63,9 @@ def _run_sql(query: str) -> pd.DataFrame:
         # Fallback keeps script functional if SQLAlchemy is unavailable.
         with psycopg2.connect(**_db_conn_kwargs()) as conn:
             df = pd.read_sql_query(query, conn)
-            logger.info("Query completed via psycopg2 fallback. Rows fetched: %d", len(df))
+            logger.info(
+                "Query completed via psycopg2 fallback. Rows fetched: %d", len(df)
+            )
             return df
 
 
@@ -87,6 +89,7 @@ def load_dashboard_df() -> pd.DataFrame:
             on dd.date_day = f.snapshot_date
     """
     return _run_sql(query)
+
 
 if __name__ == "__main__":
     logger.info("Starting Supabase extract job.")
