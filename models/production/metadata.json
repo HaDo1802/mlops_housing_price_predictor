@@ -34,21 +34,30 @@
     "method": "segmented_relative_error_quantile",
     "alpha": 0.05,
     "coverage": 0.95,
+    "num_segments": 5,
     "segment_edges": [
-      400533.0408054956,
-      638802.6066435826
+      347869.8007112862,
+      445189.1595988055,
+      571401.0514476375,
+      861650.2340839087
+    ],
+    "relative_error_quantiles_by_segment": [
+      0.4540680839927645,
+      0.4687351239510945,
+      0.2782945192945013,
+      0.44726322722649303,
+      0.5178232533909158
     ],
     "relative_error_quantiles": {
-      "global": 0.4687351239510945,
-      "low": 0.4540680839927645,
-      "mid": 0.4687351239510945,
-      "high": 0.5134205659153358
+      "global": 0.4687351239510945
     },
-    "segment_sizes": {
-      "low": 73,
-      "mid": 73,
-      "high": 74
-    },
+    "segment_sizes": [
+      44,
+      44,
+      44,
+      44,
+      44
+    ],
     "calibration_size": 220,
     "calibration_source": "test_split"
   },

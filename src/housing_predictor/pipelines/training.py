@@ -215,33 +215,54 @@ class TrainingPipeline:
         pred_nonneg = np.maximum(test_pred, 0.0)
         rel_err = np.abs(y_test - pred_nonneg) / np.maximum(np.abs(y_test), 1.0)
         global_q = float(np.quantile(rel_err, 1 - alpha, method="higher"))
+        num_segments = max(2, int(self.config.preprocessing.interval_num_segments))
+        min_segment_size = max(
+            1, int(self.config.preprocessing.interval_min_segment_size)
+        )
 
-        edge_1, edge_2 = np.quantile(pred_nonneg, [1 / 3, 2 / 3])
-        edge_1 = float(edge_1)
-        edge_2 = float(edge_2)
-        segments = {
-            "low": pred_nonneg < edge_1,
-            "mid": (pred_nonneg >= edge_1) & (pred_nonneg < edge_2),
-            "high": pred_nonneg >= edge_2,
-        }
-        relative_error_quantiles = {"global": global_q}
-        segment_sizes = {}
-        for name, mask in segments.items():
-            segment_err = rel_err[mask]
-            segment_sizes[name] = int(segment_err.size)
-            if segment_err.size >= 10:
-                relative_error_quantiles[name] = float(
-                    np.quantile(segment_err, 1 - alpha, method="higher")
+        probs = np.linspace(0, 1, num_segments + 1)[1:-1]
+        edges = (
+            np.quantile(pred_nonneg, probs).astype(float).tolist() if len(probs) else []
+        )
+        # Ensure strictly non-decreasing edges for searchsorted logic.
+        edges = np.maximum.accumulate(np.asarray(edges, dtype=float)).tolist()
+
+        q_by_segment = []
+        segment_sizes = []
+        for seg_idx in range(num_segments):
+            if seg_idx == 0:
+                mask = (
+                    pred_nonneg < edges[0]
+                    if edges
+                    else np.ones_like(pred_nonneg, dtype=bool)
+                )
+            elif seg_idx == num_segments - 1:
+                mask = (
+                    pred_nonneg >= edges[-1]
+                    if edges
+                    else np.ones_like(pred_nonneg, dtype=bool)
                 )
             else:
-                relative_error_quantiles[name] = global_q
+                mask = (pred_nonneg >= edges[seg_idx - 1]) & (
+                    pred_nonneg < edges[seg_idx]
+                )
+
+            segment_err = rel_err[mask]
+            segment_sizes.append(int(segment_err.size))
+            if segment_err.size >= min_segment_size:
+                q_seg = float(np.quantile(segment_err, 1 - alpha, method="higher"))
+            else:
+                q_seg = global_q
+            q_by_segment.append(q_seg)
 
         self.prediction_interval = {
             "method": "segmented_relative_error_quantile",
             "alpha": alpha,
             "coverage": coverage,
-            "segment_edges": [edge_1, edge_2],
-            "relative_error_quantiles": relative_error_quantiles,
+            "num_segments": int(num_segments),
+            "segment_edges": edges,
+            "relative_error_quantiles_by_segment": q_by_segment,
+            "relative_error_quantiles": {"global": global_q},
             "segment_sizes": segment_sizes,
             "calibration_size": int(len(rel_err)),
             "calibration_source": "test_split",
@@ -345,18 +366,10 @@ class TrainingPipeline:
                     "prediction_interval_rel_q_global": self.prediction_interval[
                         "relative_error_quantiles"
                     ]["global"],
-                    "prediction_interval_rel_q_low": self.prediction_interval[
-                        "relative_error_quantiles"
-                    ]["low"],
-                    "prediction_interval_rel_q_mid": self.prediction_interval[
-                        "relative_error_quantiles"
-                    ]["mid"],
-                    "prediction_interval_rel_q_high": self.prediction_interval[
-                        "relative_error_quantiles"
-                    ]["high"],
+                    "prediction_interval_num_segments": float(
+                        self.prediction_interval["num_segments"]
+                    ),
                     "calibration_size": self.prediction_interval["calibration_size"],
-                    "calibration_edge_1": self.prediction_interval["segment_edges"][0],
-                    "calibration_edge_2": self.prediction_interval["segment_edges"][1],
                     "test_cheap_segment_mae": self.metrics["test"].get(
                         "cheap_segment_mae", np.nan
                     ),

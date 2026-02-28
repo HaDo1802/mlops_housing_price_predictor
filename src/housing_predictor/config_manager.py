@@ -30,6 +30,8 @@ class PreprocessingConfig:
     encode_categorical: bool = True
     encoding_method: str = "onehot"
     target_transform: str = "log1p"
+    interval_num_segments: int = 5
+    interval_min_segment_size: int = 10
 
 
 @dataclass

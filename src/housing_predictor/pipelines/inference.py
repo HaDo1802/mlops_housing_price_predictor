@@ -215,21 +215,36 @@ class InferencePipeline:
                 return preds, lower_abs - preds, upper_abs - preds
         if interval_cfg.get("method") == "segmented_relative_error_quantile":
             edges = interval_cfg.get("segment_edges") or []
-            rel_q = interval_cfg.get("relative_error_quantiles") or {}
-            if len(edges) == 2 and rel_q:
+            rel_q_by_seg = interval_cfg.get("relative_error_quantiles_by_segment")
+            rel_q_legacy = interval_cfg.get("relative_error_quantiles") or {}
+
+            pred_nonneg = np.maximum(preds, 0.0)
+            q_per_row = None
+
+            # New format: arbitrary number of segments.
+            if isinstance(rel_q_by_seg, list) and rel_q_by_seg:
+                q_arr = np.asarray(rel_q_by_seg, dtype=float)
+                edges_arr = np.asarray(edges, dtype=float)
+                if len(edges_arr) == len(q_arr) - 1:
+                    seg_idx = np.searchsorted(edges_arr, pred_nonneg, side="right")
+                    seg_idx = np.clip(seg_idx, 0, len(q_arr) - 1)
+                    q_per_row = q_arr[seg_idx]
+
+            # Backward compatibility: old 3-segment dict.
+            if q_per_row is None and len(edges) == 2 and rel_q_legacy:
                 edge_1 = float(edges[0])
                 edge_2 = float(edges[1])
-                q_global = float(rel_q.get("global", 0.0))
-                q_low = float(rel_q.get("low", q_global))
-                q_mid = float(rel_q.get("mid", q_global))
-                q_high = float(rel_q.get("high", q_global))
-
-                pred_nonneg = np.maximum(preds, 0.0)
+                q_global = float(rel_q_legacy.get("global", 0.0))
+                q_low = float(rel_q_legacy.get("low", q_global))
+                q_mid = float(rel_q_legacy.get("mid", q_global))
+                q_high = float(rel_q_legacy.get("high", q_global))
                 q_per_row = np.where(
                     pred_nonneg < edge_1,
                     q_low,
                     np.where(pred_nonneg < edge_2, q_mid, q_high),
                 )
+
+            if q_per_row is not None:
                 lower_abs = np.maximum(0.0, pred_nonneg * (1.0 - q_per_row))
                 upper_abs = pred_nonneg * (1.0 + q_per_row)
                 return preds, lower_abs - preds, upper_abs - preds

@@ -402,62 +402,46 @@ def create_input_form(
     if "inputs" not in st.session_state:
         st.session_state.inputs = {}
 
-    # Create tabs for better organization
-    tab1, tab2 = st.tabs(["📊 Property Features", "📍 Location & Style"])
-
     inputs = {}
+    st.subheader("Property Inputs")
+    all_features = list(numeric_features) + list(categorical_features)
+    if not all_features:
+        st.info("No input features available from API/model metadata.")
+        return inputs, all_features
 
-    with tab1:
-        st.subheader("Numerical Features")
-        if not numeric_features:
-            st.info("No numeric features available from API/model metadata.")
-        else:
-            col_left, col_right = st.columns(2)
-            for idx, feature in enumerate(numeric_features):
-                col = col_left if idx % 2 == 0 else col_right
-                with col:
-                    label = display_labels.get(
-                        feature, feature.replace("_", " ").title()
-                    )
-                    params = NUMERIC_INPUT_CONFIG.get(
-                        feature, {"min_value": 0.0, "value": 0.0, "step": 1.0}
-                    )
-                    inputs[feature] = st.number_input(
+    col_left, col_right = st.columns(2)
+    for idx, feature in enumerate(all_features):
+        col = col_left if idx % 2 == 0 else col_right
+        with col:
+            label = display_labels.get(feature, feature.replace("_", " ").title())
+            if feature in numeric_features:
+                params = NUMERIC_INPUT_CONFIG.get(
+                    feature, {"min_value": 0.0, "value": 0.0, "step": 1.0}
+                )
+                inputs[feature] = st.number_input(
+                    label,
+                    key=f"input_{feature}",
+                    help=f"Enter {label.lower()}",
+                    **params,
+                )
+            else:
+                options = categorical_options.get(feature)
+                if options:
+                    val = st.selectbox(
                         label,
+                        options=[""] + options,
+                        help=f"Select {label.lower()}",
                         key=f"input_{feature}",
+                    )
+                    inputs[feature] = None if val == "" else val
+                else:
+                    text = st.text_input(
+                        label,
+                        value="",
                         help=f"Enter {label.lower()}",
-                        **params,
+                        key=f"input_{feature}",
                     )
-
-    with tab2:
-        st.subheader("Categorical Features")
-        if not categorical_features:
-            st.info("No categorical features available from API/model metadata.")
-        else:
-            col1, col2 = st.columns(2)
-            for idx, feature in enumerate(categorical_features):
-                col = col1 if idx % 2 == 0 else col2
-                with col:
-                    label = display_labels.get(
-                        feature, feature.replace("_", " ").title()
-                    )
-                    options = categorical_options.get(feature)
-                    if options:
-                        val = st.selectbox(
-                            label,
-                            options=[""] + options,
-                            help=f"Select {label.lower()}",
-                            key=f"input_{feature}",
-                        )
-                        inputs[feature] = None if val == "" else val
-                    else:
-                        text = st.text_input(
-                            label,
-                            value="",
-                            help=f"Enter {label.lower()}",
-                            key=f"input_{feature}",
-                        )
-                        inputs[feature] = None if text.strip() == "" else text.strip()
+                    inputs[feature] = None if text.strip() == "" else text.strip()
 
     return inputs, numeric_features + categorical_features
 
@@ -729,6 +713,18 @@ def main():
         """
         )
 
+        st.markdown("**Input Requirements (Required):**")
+        st.markdown(
+            f"""
+        - `bedrooms`: {NUMERIC_INPUT_CONFIG['bedrooms']['min_value']} to {NUMERIC_INPUT_CONFIG['bedrooms']['max_value']}
+        - `bathrooms`: {NUMERIC_INPUT_CONFIG['bathrooms']['min_value']} to {NUMERIC_INPUT_CONFIG['bathrooms']['max_value']}
+        - `livingarea`: {NUMERIC_INPUT_CONFIG['livingarea']['min_value']} to {NUMERIC_INPUT_CONFIG['livingarea']['max_value']} sqft
+        - `latitude`: {NUMERIC_INPUT_CONFIG['latitude']['min_value']} to {NUMERIC_INPUT_CONFIG['latitude']['max_value']}
+        - `longitude`: {NUMERIC_INPUT_CONFIG['longitude']['min_value']} to {NUMERIC_INPUT_CONFIG['longitude']['max_value']}
+        - `propertytype`: select one of the provided categories
+        """
+        )
+
         st.markdown("---")
         st.markdown("**Model Info:**")
         resolved_url, candidates, health = resolve_api_base_url()
@@ -773,8 +769,8 @@ def main():
         st.markdown(
             """
         - All fields are required
-        - Numerical values must be non-negative
-        - Coordinates should be valid for the target market
+        - Numerical values must be within the allowed ranges shown in the form
+        - Latitude/longitude should be in the target market bounds
         - Use exact categorical values shown in dropdowns
         """
         )

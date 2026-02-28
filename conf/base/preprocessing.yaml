@@ -5,3 +5,5 @@ scaling_method: "standard"
 encode_categorical: true
 encoding_method: "onehot"
 target_transform: "log1p"
+interval_num_segments: 5
+interval_min_segment_size: 10
