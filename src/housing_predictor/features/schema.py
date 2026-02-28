@@ -4,8 +4,9 @@ MODEL_FEATURES = [
     "bedrooms",
     "bathrooms",
     "livingarea",
+    "latitude",
+    "longitude",
     "propertytype",
-    "vegas_district",
 ]
 
 API_TO_MODEL_FIELDS = {
@@ -13,28 +14,31 @@ API_TO_MODEL_FIELDS = {
     "bathrooms": "bathrooms",
     "livingarea": "livingarea",
     "living_area": "livingarea",
+    "latitude": "latitude",
+    "longitude": "longitude",
     "propertytype": "propertytype",
     "property_type": "propertytype",
-    "vegas_district": "vegas_district",
 }
 
 NUMERIC_FEATURES = [
     "bedrooms",
     "bathrooms",
     "livingarea",
+    "latitude",
+    "longitude",
 ]
 
 CATEGORICAL_FEATURES = [
     "propertytype",
-    "vegas_district",
 ]
 
 FEATURE_DISPLAY_LABELS = {
     "bedrooms": "Bedrooms",
     "bathrooms": "Bathrooms",
     "livingarea": "Living Area (sqft)",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
     "propertytype": "Property Type",
-    "vegas_district": "Vegas District",
 }
 
 CATEGORICAL_OPTIONS = {
@@ -44,21 +48,6 @@ CATEGORICAL_OPTIONS = {
         "CONDO",
         "MULTI_FAMILY",
         "MOBILE",
-    ],
-    "vegas_district": [
-        "Summerlin",
-        "Green Valley",
-        "Henderson",
-        "Downtown Las Vegas",
-        "North Las Vegas",
-        "Spring Valley",
-        "Paradise",
-        "Enterprise",
-        "Centennial",
-        "Mountains Edge",
-        "The Strip",
-        "Winchester",
-        "Anthem",
     ],
 }
 

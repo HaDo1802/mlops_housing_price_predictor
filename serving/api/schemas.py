@@ -14,8 +14,9 @@ class HouseFeatures(BaseModel):
     bedrooms: int = Field(..., ge=0, le=20)
     bathrooms: float = Field(..., ge=0, le=20)
     livingarea: float = Field(..., gt=0)
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
     propertytype: str
-    vegas_district: str
 
 
 class PredictionResponse(BaseModel):

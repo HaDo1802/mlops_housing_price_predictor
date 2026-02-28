@@ -46,11 +46,11 @@ NUMERIC_FEATURES = list(
     getattr(
         feature_schema,
         "NUMERIC_FEATURES",
-        ["bedrooms", "bathrooms", "livingarea"],
+        ["bedrooms", "bathrooms", "livingarea", "latitude", "longitude"],
     )
 )
 CATEGORICAL_FEATURES = list(
-    getattr(feature_schema, "CATEGORICAL_FEATURES", ["propertytype", "vegas_district"])
+    getattr(feature_schema, "CATEGORICAL_FEATURES", ["propertytype"])
 )
 FEATURE_DISPLAY_LABELS = dict(
     getattr(
@@ -60,8 +60,9 @@ FEATURE_DISPLAY_LABELS = dict(
             "bedrooms": "Bedrooms",
             "bathrooms": "Bathrooms",
             "livingarea": "Living Area (sqft)",
+            "latitude": "Latitude",
+            "longitude": "Longitude",
             "propertytype": "Property Type",
-            "vegas_district": "Vegas District",
         },
     )
 )
@@ -76,21 +77,6 @@ CATEGORICAL_OPTIONS = dict(
                 "CONDO",
                 "MULTI_FAMILY",
                 "MOBILE",
-            ],
-            "vegas_district": [
-                "Summerlin",
-                "Green Valley",
-                "Henderson",
-                "Downtown Las Vegas",
-                "North Las Vegas",
-                "Spring Valley",
-                "Paradise",
-                "Enterprise",
-                "Centennial",
-                "Mountains Edge",
-                "The Strip",
-                "Winchester",
-                "Anthem",
             ],
         },
     )
@@ -187,6 +173,13 @@ NUMERIC_INPUT_CONFIG = {
         "max_value": 20000.0,
         "value": 1800.0,
         "step": 50.0,
+    },
+    "latitude": {"min_value": 35.5, "max_value": 36.5, "value": 36.1, "step": 0.0001},
+    "longitude": {
+        "min_value": -115.5,
+        "max_value": -114.5,
+        "value": -115.17,
+        "step": 0.0001,
     },
 }
 

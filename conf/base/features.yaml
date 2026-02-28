@@ -3,6 +3,7 @@ features:
     - "bedrooms"
     - "bathrooms"
     - "livingarea"
+    - "latitude"
+    - "longitude"
   categorical:
     - "propertytype"
-    - "vegas_district"

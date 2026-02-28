@@ -21,6 +21,10 @@ class PreprocessingConfig:
     handle_missing: str = "mean"
     handle_outliers: bool = True
     outlier_method: str = "iqr"
+    outlier_iqr_multiplier: float = 1.5
+    outlier_ppsf_min: float = 80.0
+    outlier_ppsf_max: float = 1000.0
+    outlier_min_livingarea: float = 100.0
     scale_features: bool = True
     scaling_method: str = "standard"
     encode_categorical: bool = True

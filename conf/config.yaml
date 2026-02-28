@@ -5,7 +5,7 @@ data:
   raw_data_path: "data/raw/data_master.csv"
   target_column: "price"
   test_size: 0.2
-  val_size: 0.1
+  val_size: 0.0
   random_state: 42
 
 features:
@@ -13,14 +13,16 @@ features:
     - "bedrooms"
     - "bathrooms"
     - "livingarea"
+    - "latitude"
+    - "longitude"
 
   categorical:
     - "propertytype"
-    - "vegas_district"
 
 # Preprocessing Configuration
 preprocessing:
   handle_missing: "mean"
+  handle_outliers: false
   scale_features: true
   scaling_method: "standard"
   encode_categorical: true

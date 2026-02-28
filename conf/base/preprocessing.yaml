@@ -1,4 +1,5 @@
 handle_missing: "mean"
+handle_outliers: false
 scale_features: true
 scaling_method: "standard"
 encode_categorical: true

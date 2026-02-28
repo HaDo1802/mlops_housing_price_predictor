@@ -213,6 +213,26 @@ class InferencePipeline:
                 lower_abs = np.maximum(0.0, pred_plus_1 * np.exp(-interval_log) - 1.0)
                 upper_abs = pred_plus_1 * np.exp(interval_log) - 1.0
                 return preds, lower_abs - preds, upper_abs - preds
+        if interval_cfg.get("method") == "segmented_relative_error_quantile":
+            edges = interval_cfg.get("segment_edges") or []
+            rel_q = interval_cfg.get("relative_error_quantiles") or {}
+            if len(edges) == 2 and rel_q:
+                edge_1 = float(edges[0])
+                edge_2 = float(edges[1])
+                q_global = float(rel_q.get("global", 0.0))
+                q_low = float(rel_q.get("low", q_global))
+                q_mid = float(rel_q.get("mid", q_global))
+                q_high = float(rel_q.get("high", q_global))
+
+                pred_nonneg = np.maximum(preds, 0.0)
+                q_per_row = np.where(
+                    pred_nonneg < edge_1,
+                    q_low,
+                    np.where(pred_nonneg < edge_2, q_mid, q_high),
+                )
+                lower_abs = np.maximum(0.0, pred_nonneg * (1.0 - q_per_row))
+                upper_abs = pred_nonneg * (1.0 + q_per_row)
+                return preds, lower_abs - preds, upper_abs - preds
 
         base_estimator = self._unwrap_model_estimator()
         if hasattr(base_estimator, "estimators_"):

@@ -5,7 +5,6 @@ import logging
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from statistics import NormalDist
 
 import mlflow
 import mlflow.sklearn
@@ -85,15 +84,84 @@ class TrainingPipeline:
         self.df_selected = df_raw[selected].copy()
 
     def split_data(self):
-        self.X_train, self.X_test, self.X_val, self.y_train, self.y_test, self.y_val = (
+        self.X_train, self.X_test, self.y_train, self.y_test = (
             self.splitter.split_dataframe(
-                self.df_selected, target_col=self.config.data.target_column
+                self.df_selected,
+                target_col=self.config.data.target_column,
+                return_val=False,
             )
         )
+        self.X_val = None
+        self.y_val = None
+        self._remove_training_outliers()
+
+    def _remove_training_outliers(self) -> None:
+        """Remove outliers from the training split only (leakage-safe)."""
+        cfg = self.config.preprocessing
+        if not getattr(cfg, "handle_outliers", False):
+            return
+
+        method = str(getattr(cfg, "outlier_method", "iqr")).lower()
+        initial_count = len(self.y_train)
+        keep_mask = np.ones(initial_count, dtype=bool)
+
+        if method == "iqr":
+            y = self.y_train.astype(float)
+            q1 = float(y.quantile(0.25))
+            q3 = float(y.quantile(0.75))
+            iqr = q3 - q1
+            mult = float(getattr(cfg, "outlier_iqr_multiplier", 1.5))
+            lower = q1 - mult * iqr
+            upper = q3 + mult * iqr
+            keep_mask = (y >= lower).to_numpy() & (y <= upper).to_numpy()
+            logger.info(
+                "Outlier filter (iqr): lower=%.2f upper=%.2f removed=%s/%s",
+                lower,
+                upper,
+                int(initial_count - keep_mask.sum()),
+                int(initial_count),
+            )
+        elif method == "ppsf_band":
+            if "livingarea" not in self.X_train.columns:
+                logger.warning(
+                    "Outlier filter (ppsf_band) skipped: 'livingarea' not in training features."
+                )
+                return
+            y = self.y_train.astype(float).to_numpy()
+            living = self.X_train["livingarea"].astype(float).to_numpy()
+            min_living = float(getattr(cfg, "outlier_min_livingarea", 100.0))
+            ppsf_min = float(getattr(cfg, "outlier_ppsf_min", 80.0))
+            ppsf_max = float(getattr(cfg, "outlier_ppsf_max", 1000.0))
+            valid_living = living >= min_living
+            ppsf = np.divide(y, np.maximum(living, 1e-6))
+            keep_mask = valid_living & (ppsf >= ppsf_min) & (ppsf <= ppsf_max)
+            logger.info(
+                "Outlier filter (ppsf_band): ppsf_min=%.2f ppsf_max=%.2f min_living=%.2f removed=%s/%s",
+                ppsf_min,
+                ppsf_max,
+                min_living,
+                int(initial_count - keep_mask.sum()),
+                int(initial_count),
+            )
+        else:
+            logger.warning(
+                "Unknown outlier_method '%s'. Skipping outlier filtering.", method
+            )
+            return
+
+        kept = int(keep_mask.sum())
+        if kept < 30:
+            logger.warning(
+                "Outlier filtering would leave only %s rows; skipping filter to avoid underfitting.",
+                kept,
+            )
+            return
+
+        self.X_train = self.X_train.loc[keep_mask].copy()
+        self.y_train = self.y_train.loc[keep_mask].copy()
 
     def preprocess_data(self):
         self.X_train_transformed = self.preprocessor.fit_transform(self.X_train)
-        self.X_val_transformed = self.preprocessor.transform(self.X_val)
         self.X_test_transformed = self.preprocessor.transform(self.X_test)
 
     @staticmethod
@@ -113,44 +181,56 @@ class TrainingPipeline:
         self.model = self.trainer.fit(
             self.X_train_transformed, self.y_train, sample_weight=train_weights
         )
-        test_pred = self.model.predict(self.X_test_transformed)
-        val_pred = self.model.predict(self.X_val_transformed)
-        y_val = np.asarray(self.y_val, dtype=float)
-        pred_val = np.asarray(val_pred, dtype=float)
-        pred_val_nonneg = np.maximum(pred_val, 0.0)
-        log_residuals = np.log1p(y_val) - np.log1p(pred_val_nonneg)
+        test_pred = np.asarray(self.model.predict(self.X_test_transformed), dtype=float)
+        y_test = np.asarray(self.y_test, dtype=float)
+
+        # Segmented relative-error calibration on the holdout test split.
+        # We compute separate quantiles for low/mid/high predicted-price bands.
         alpha = 0.05
         coverage = float(1 - alpha)
-        calibration_size = int(len(log_residuals))
-        dof = max(calibration_size - 2, 1)
-        sum_errs = float(np.sum(np.square(log_residuals)))
-        stdev = float(np.sqrt(sum_errs / dof))
-        z_score = float(NormalDist().inv_cdf(1 - alpha / 2))
-        interval = float(z_score * stdev)
+        pred_nonneg = np.maximum(test_pred, 0.0)
+        rel_err = np.abs(y_test - pred_nonneg) / np.maximum(np.abs(y_test), 1.0)
+        global_q = float(np.quantile(rel_err, 1 - alpha, method="higher"))
+
+        edge_1, edge_2 = np.quantile(pred_nonneg, [1 / 3, 2 / 3])
+        edge_1 = float(edge_1)
+        edge_2 = float(edge_2)
+        segments = {
+            "low": pred_nonneg < edge_1,
+            "mid": (pred_nonneg >= edge_1) & (pred_nonneg < edge_2),
+            "high": pred_nonneg >= edge_2,
+        }
+        relative_error_quantiles = {"global": global_q}
+        segment_sizes = {}
+        for name, mask in segments.items():
+            segment_err = rel_err[mask]
+            segment_sizes[name] = int(segment_err.size)
+            if segment_err.size >= 10:
+                relative_error_quantiles[name] = float(
+                    np.quantile(segment_err, 1 - alpha, method="higher")
+                )
+            else:
+                relative_error_quantiles[name] = global_q
+
         self.prediction_interval = {
-            "method": "lognormal_symmetric_residual_std",
+            "method": "segmented_relative_error_quantile",
             "alpha": alpha,
             "coverage": coverage,
-            "stdev_log_residual": stdev,
-            "z_score": z_score,
-            "interval_half_width_log": interval,
-            "degrees_of_freedom": int(dof),
-            "calibration_size": calibration_size,
+            "segment_edges": [edge_1, edge_2],
+            "relative_error_quantiles": relative_error_quantiles,
+            "segment_sizes": segment_sizes,
+            "calibration_size": int(len(rel_err)),
+            "calibration_source": "test_split",
         }
         self.metrics = {
             "test": regression_metrics(self.y_test, test_pred),
-            "validation": regression_metrics(self.y_val, val_pred),
+            "validation": None,
         }
-        cheap_cutoff = float(np.percentile(np.asarray(self.y_test, dtype=float), 25))
-        cheap_mask = np.asarray(self.y_test, dtype=float) <= cheap_cutoff
+        cheap_cutoff = float(np.percentile(y_test, 25))
+        cheap_mask = y_test <= cheap_cutoff
         if np.any(cheap_mask):
             cheap_mae = float(
-                np.mean(
-                    np.abs(
-                        np.asarray(self.y_test, dtype=float)[cheap_mask]
-                        - test_pred[cheap_mask]
-                    )
-                )
+                np.mean(np.abs(y_test[cheap_mask] - test_pred[cheap_mask]))
             )
             self.metrics["test"]["cheap_segment_cutoff_p25"] = cheap_cutoff
             self.metrics["test"]["cheap_segment_mae"] = cheap_mae
@@ -167,7 +247,7 @@ class TrainingPipeline:
             "feature_names": self.preprocessor.get_feature_names(),
             "prediction_interval": self.prediction_interval,
             "train_size": len(self.X_train),
-            "val_size": len(self.X_val),
+            "val_size": 0,
             "test_size": len(self.X_test),
         }
 
@@ -227,11 +307,9 @@ class TrainingPipeline:
             self._log_step("TRAIN AND EVALUATE")
             self.train_and_eval()
             logger.info(
-                "Metrics | test_r2=%.6f test_rmse=%.2f val_r2=%.6f val_rmse=%.2f",
+                "Metrics | test_r2=%.6f test_rmse=%.2f",
                 float(self.metrics["test"]["r2"]),
                 float(self.metrics["test"]["rmse"]),
-                float(self.metrics["validation"]["r2"]),
-                float(self.metrics["validation"]["rmse"]),
             )
 
             self._log_step("LOG TO MLFLOW")
@@ -240,11 +318,21 @@ class TrainingPipeline:
                     "test_r2": self.metrics["test"]["r2"],
                     "test_rmse": self.metrics["test"]["rmse"],
                     "test_mae": self.metrics["test"]["mae"],
-                    "val_r2": self.metrics["validation"]["r2"],
-                    "val_rmse": self.metrics["validation"]["rmse"],
-                    "prediction_interval_log_half_width": self.prediction_interval[
-                        "interval_half_width_log"
-                    ],
+                    "prediction_interval_rel_q_global": self.prediction_interval[
+                        "relative_error_quantiles"
+                    ]["global"],
+                    "prediction_interval_rel_q_low": self.prediction_interval[
+                        "relative_error_quantiles"
+                    ]["low"],
+                    "prediction_interval_rel_q_mid": self.prediction_interval[
+                        "relative_error_quantiles"
+                    ]["mid"],
+                    "prediction_interval_rel_q_high": self.prediction_interval[
+                        "relative_error_quantiles"
+                    ]["high"],
+                    "calibration_size": self.prediction_interval["calibration_size"],
+                    "calibration_edge_1": self.prediction_interval["segment_edges"][0],
+                    "calibration_edge_2": self.prediction_interval["segment_edges"][1],
                     "test_cheap_segment_mae": self.metrics["test"].get(
                         "cheap_segment_mae", np.nan
                     ),
