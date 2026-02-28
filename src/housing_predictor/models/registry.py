@@ -37,7 +37,9 @@ class ModelRegistryManager:
         model_key: str | None = None,
     ) -> str:
         model_uri = f"runs:/{run_id}/model"
-        result = mlflow.register_model(model_uri=model_uri, name=self.registry_model_name)
+        result = mlflow.register_model(
+            model_uri=model_uri, name=self.registry_model_name
+        )
         version = str(result.version)
 
         client = MlflowClient()
