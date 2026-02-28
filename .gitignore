@@ -20,6 +20,6 @@ learning.md
 .pytest_cache/
 .ipynb_checkpoints/
 .vercel
-models/
+/models/
 .github/
 docs/
