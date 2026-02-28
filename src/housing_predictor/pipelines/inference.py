@@ -322,6 +322,17 @@ class _CompatUnpickler(pickle.Unpickler):
 
 def _load_pickle_with_compat(path: Path):
     """Load pickle file, retrying with legacy module path remapping when needed."""
+    # Common deployment failure: file exists but is a Git LFS pointer text file
+    # (starts with "version https://git-lfs.github.com/spec/v1") instead of
+    # real binary pickle bytes.
+    with open(path, "rb") as f:
+        prefix = f.read(64)
+    if prefix.startswith(b"version https://git-lfs.github.com/spec/v1"):
+        raise ValueError(
+            f"{path} is a Git LFS pointer, not a real model artifact. "
+            "Ensure deployment includes actual .pkl binaries (or load from MLflow)."
+        )
+
     with open(path, "rb") as f:
         try:
             return pickle.load(f)

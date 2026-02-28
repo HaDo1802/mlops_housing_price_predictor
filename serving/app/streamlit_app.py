@@ -39,7 +39,7 @@ for p in (PROJECT_ROOT, SRC_ROOT):
     if p_str not in sys.path:
         sys.path.insert(0, p_str)
 
-from housing_predictor.config_manager import ConfigManager
+from housing_predictor.features.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 from housing_predictor.monitoring.feedback_collector import save_feedback_record
 
 # Configure logging
@@ -125,15 +125,58 @@ st.markdown(
 )
 
 
-@st.cache_resource
-def load_config():
-    """Load configuration (cached)"""
-    try:
-        config_manager = ConfigManager("conf/config.yaml")
-        return config_manager.get_config()
-    except Exception as e:
-        st.error(f"Error loading configuration: {str(e)}")
-        st.stop()
+DISPLAY_LABELS = {
+    "bedrooms": "Bedrooms",
+    "bathrooms": "Bathrooms",
+    "livingarea": "Living Area (sqft)",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "propertytype": "Property Type",
+    "vegas_district": "Vegas District",
+}
+
+NUMERIC_INPUT_CONFIG = {
+    "bedrooms": {"min_value": 0, "max_value": 20, "value": 3, "step": 1},
+    "bathrooms": {"min_value": 0.0, "max_value": 20.0, "value": 2.0, "step": 0.5},
+    "livingarea": {
+        "min_value": 100.0,
+        "max_value": 20000.0,
+        "value": 1800.0,
+        "step": 50.0,
+    },
+    "latitude": {"min_value": 35.5, "max_value": 36.5, "value": 36.17, "step": 0.0001},
+    "longitude": {
+        "min_value": -115.5,
+        "max_value": -114.5,
+        "value": -115.14,
+        "step": 0.0001,
+    },
+}
+
+CATEGORICAL_OPTIONS = {
+    "propertytype": [
+        "SINGLE_FAMILY",
+        "TOWNHOUSE",
+        "CONDO",
+        "MULTI_FAMILY",
+        "MOBILE",
+    ],
+    "vegas_district": [
+        "Summerlin",
+        "Green Valley",
+        "Henderson",
+        "Downtown Las Vegas",
+        "North Las Vegas",
+        "Spring Valley",
+        "Paradise",
+        "Enterprise",
+        "Centennial",
+        "Mountains Edge",
+        "The Strip",
+        "Winchester",
+        "Anthem",
+    ],
+}
 
 
 @st.cache_data(ttl=60)
@@ -150,6 +193,29 @@ def fetch_model_info(base_url: str):
     except requests.RequestException as exc:
         logger.warning("Model info request error: %s", exc)
     return None
+
+
+def resolve_feature_spec(model_info: Optional[dict]) -> tuple[list[str], list[str]]:
+    """Resolve numeric/categorical features with API-first fallback."""
+    numeric_features = list(NUMERIC_FEATURES)
+    categorical_features = list(CATEGORICAL_FEATURES)
+
+    if model_info:
+        model_features = model_info.get("features", {}).get("names", []) or []
+        if model_features:
+            numeric_features = [f for f in model_features if f in NUMERIC_FEATURES]
+            categorical_features = [
+                f for f in model_features if f in CATEGORICAL_FEATURES
+            ]
+            # Preserve unknown features so UI still renders if API evolves.
+            extras = [
+                f
+                for f in model_features
+                if f not in numeric_features and f not in categorical_features
+            ]
+            categorical_features.extend(extras)
+
+    return numeric_features, categorical_features
 
 
 @st.cache_data(ttl=30)
@@ -205,39 +271,8 @@ def get_active_api_base_url() -> str:
 
 
 def build_api_payload(inputs: dict) -> dict:
-    """Map Streamlit inputs to FastAPI payload keys"""
-    feature_map = {
-        "Lot Area": "lot_area",
-        "Total Bsmt SF": "total_bsmt_sf",
-        "1st Flr SF": "first_flr_sf",
-        "2nd Flr SF": "second_flr_sf",
-        "Gr Liv Area": "gr_liv_area",
-        "Garage Area": "garage_area",
-        "Overall Qual": "overall_qual",
-        "Overall Cond": "overall_cond",
-        "Year Built": "year_built",
-        "Year Remod/Add": "year_remod_add",
-        "Bedroom AbvGr": "bedroom_abvgr",
-        "Full Bath": "full_bath",
-        "Half Bath": "half_bath",
-        "TotRms AbvGrd": "totrms_abvgrd",
-        "Fireplaces": "fireplaces",
-        "Garage Cars": "garage_cars",
-        "Neighborhood": "neighborhood",
-        "MS Zoning": "ms_zoning",
-        "Bldg Type": "bldg_type",
-        "House Style": "house_style",
-        "Foundation": "foundation",
-        "Central Air": "central_air",
-        "Garage Type": "garage_type",
-    }
-
-    payload = {}
-    for feature, value in inputs.items():
-        api_key = feature_map.get(feature)
-        if api_key is not None:
-            payload[api_key] = value
-    return payload
+    """Return payload expected by current API schema keys."""
+    return {k: v for k, v in inputs.items() if v is not None}
 
 
 def request_prediction(payload: dict) -> dict:
@@ -307,8 +342,10 @@ def validate_inputs(inputs: dict, required_features: list) -> tuple:
     return is_valid, missing_fields, error_messages
 
 
-def create_input_form(config):
-    """Create the input form based on configured features"""
+def create_input_form(
+    numeric_features: list[str], categorical_features: list[str]
+) -> tuple[dict, list[str]]:
+    """Create input form from resolved feature specification."""
 
     st.markdown(
         '<div class="main-header">🏠 Housing Price Predictor</div>',
@@ -318,10 +355,6 @@ def create_input_form(config):
         '<div class="sub-header">Enter property details to predict the sale price</div>',
         unsafe_allow_html=True,
     )
-
-    # Get features from config
-    numeric_features = config.features.numeric
-    categorical_features = config.features.categorical
 
     # Initialize session state for inputs
     if "inputs" not in st.session_state:
@@ -334,173 +367,55 @@ def create_input_form(config):
 
     with tab1:
         st.subheader("Numerical Features")
-
-        # Group features logically
-        group_defs = [
-            (
-                "Size & Area",
-                [
-                    "Lot Area",
-                    "Total Bsmt SF",
-                    "1st Flr SF",
-                    "2nd Flr SF",
-                    "Gr Liv Area",
-                    "Garage Area",
-                ],
-                {"min_value": 0.0, "value": None, "step": 10.0},
-            ),
-            (
-                "Quality & Condition",
-                ["Overall Qual", "Overall Cond"],
-                {
-                    "min_value": 1,
-                    "max_value": 10,
-                    "value": None,
-                    "step": 1,
-                    "help": "Rate from 1 (poor) to 10 (excellent)",
-                },
-            ),
-            (
-                "Year",
-                ["Year Built", "Year Remod/Add"],
-                {
-                    "min_value": 1800,
-                    "max_value": 2026,
-                    "value": None,
-                    "step": 1,
-                },
-            ),
-            (
-                "Rooms & Facilities",
-                [
-                    "Bedroom AbvGr",
-                    "Full Bath",
-                    "Half Bath",
-                    "TotRms AbvGrd",
-                    "Fireplaces",
-                    "Garage Cars",
-                ],
-                {"min_value": 0, "max_value": 20, "value": None, "step": 1},
-            ),
-        ]
-
-        active_groups = []
-        for title, features, params in group_defs:
-            active = [f for f in features if f in numeric_features]
-            if active:
-                active_groups.append((title, active, params))
-
-        if not active_groups:
-            st.info("No numeric features configured in `conf/config.yaml`.")
+        if not numeric_features:
+            st.info("No numeric features available from API/model metadata.")
         else:
-            columns = st.columns(min(3, len(active_groups)))
-            for idx, (title, features, params) in enumerate(active_groups):
-                with columns[idx % len(columns)]:
-                    st.markdown(f"**{title}**")
-                    for feature in features:
-                        help_text = params.get("help")
-                        if help_text is None:
-                            if "SF" in feature or "Area" in feature:
-                                help_text = (
-                                    f"Enter the {feature.lower()} in square feet"
-                                )
-                            else:
-                                help_text = f"Enter {feature.lower()}"
-                        input_params = {k: v for k, v in params.items() if k != "help"}
-                        inputs[feature] = st.number_input(
-                            feature,
-                            help=help_text,
-                            key=f"input_{feature}",
-                            **input_params,
-                        )
+            col_left, col_right = st.columns(2)
+            for idx, feature in enumerate(numeric_features):
+                col = col_left if idx % 2 == 0 else col_right
+                with col:
+                    label = DISPLAY_LABELS.get(
+                        feature, feature.replace("_", " ").title()
+                    )
+                    params = NUMERIC_INPUT_CONFIG.get(
+                        feature, {"min_value": 0.0, "value": 0.0, "step": 1.0}
+                    )
+                    inputs[feature] = st.number_input(
+                        label,
+                        key=f"input_{feature}",
+                        help=f"Enter {label.lower()}",
+                        **params,
+                    )
 
     with tab2:
         st.subheader("Categorical Features")
-
-        col1, col2 = st.columns(2)
-
-        # Define options for categorical features
-        categorical_options = {
-            "Neighborhood": [
-                "Blmngtn",
-                "Blueste",
-                "BrDale",
-                "BrkSide",
-                "ClearCr",
-                "CollgCr",
-                "Crawfor",
-                "Edwards",
-                "Gilbert",
-                "Greens",
-                "GrnHill",
-                "IDOTRR",
-                "Landmrk",
-                "MeadowV",
-                "Mitchel",
-                "NAmes",
-                "NPkVill",
-                "NWAmes",
-                "NoRidge",
-                "NridgHt",
-                "OldTown",
-                "SWISU",
-                "Sawyer",
-                "SawyerW",
-                "Somerst",
-                "StoneBr",
-                "Timber",
-                "Veenker",
-            ],
-            "MS Zoning": ["A (agr)", "C (all)", "FV", "RH", "RL", "RM"],
-            "Bldg Type": ["1Fam", "2fmCon", "Duplex", "Twnhs", "TwnhsE"],
-            "House Style": [
-                "1.5Fin",
-                "1.5Unf",
-                "1Story",
-                "2.5Fin",
-                "2.5Unf",
-                "2Story",
-                "SFoyer",
-                "SLvl",
-            ],
-            "Foundation": ["BrkTil", "CBlock", "PConc", "Slab", "Stone", "Wood"],
-            "Central Air": ["N", "Y"],
-            "Garage Type": [
-                "2Types",
-                "Attchd",
-                "Basment",
-                "BuiltIn",
-                "CarPort",
-                "Detchd",
-                "nan",
-            ],
-        }
-
-        with col1:
-            for i, feature in enumerate(categorical_features[:4]):
-                if feature in categorical_options:
-                    inputs[feature] = st.selectbox(
-                        feature,
-                        options=[""] + categorical_options[feature],
-                        help=f"Select {feature.lower()}",
-                        key=f"input_{feature}",
+        if not categorical_features:
+            st.info("No categorical features available from API/model metadata.")
+        else:
+            col1, col2 = st.columns(2)
+            for idx, feature in enumerate(categorical_features):
+                col = col1 if idx % 2 == 0 else col2
+                with col:
+                    label = DISPLAY_LABELS.get(
+                        feature, feature.replace("_", " ").title()
                     )
-                    # Convert empty string to None
-                    if inputs[feature] == "":
-                        inputs[feature] = None
-
-        with col2:
-            for i, feature in enumerate(categorical_features[4:]):
-                if feature in categorical_options:
-                    inputs[feature] = st.selectbox(
-                        feature,
-                        options=[""] + categorical_options[feature],
-                        help=f"Select {feature.lower()}",
-                        key=f"input_{feature}",
-                    )
-                    # Convert empty string to None
-                    if inputs[feature] == "":
-                        inputs[feature] = None
+                    options = CATEGORICAL_OPTIONS.get(feature)
+                    if options:
+                        val = st.selectbox(
+                            label,
+                            options=[""] + options,
+                            help=f"Select {label.lower()}",
+                            key=f"input_{feature}",
+                        )
+                        inputs[feature] = None if val == "" else val
+                    else:
+                        text = st.text_input(
+                            label,
+                            value="",
+                            help=f"Enter {label.lower()}",
+                            key=f"input_{feature}",
+                        )
+                        inputs[feature] = None if text.strip() == "" else text.strip()
 
     return inputs, numeric_features + categorical_features
 
@@ -748,10 +663,6 @@ def render_feedback_form(inputs: dict, result: dict) -> None:
 def main():
     """Main application logic"""
 
-    # Load pipeline and config
-    with st.spinner("Loading prediction model..."):
-        config = load_config()
-
     # Sidebar
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/1946/1946488.png", width=100)
@@ -792,6 +703,11 @@ def main():
             load_error = health.get("load_error")
             if load_error:
                 st.caption(f"Load error: {load_error}")
+                if "invalid load key, 'v'" in str(load_error):
+                    st.error(
+                        "Model artifact looks like a Git LFS pointer file, not a real pickle. "
+                        "Redeploy API with actual model binaries available at runtime."
+                    )
             model_info = None
         else:
             model_info = fetch_model_info(active_url)
@@ -801,7 +717,7 @@ def main():
             if features is not None:
                 st.info(f"Features: {features}")
         else:
-            st.warning("Model info unavailable. Check API connectivity.")
+            st.warning("Model info unavailable. Using local fallback feature schema.")
 
         st.markdown("---")
         st.markdown("**Need Help?**")
@@ -815,7 +731,10 @@ def main():
         )
 
     # Main content
-    inputs, required_features = create_input_form(config)
+    numeric_features, categorical_features = resolve_feature_spec(model_info)
+    inputs, required_features = create_input_form(
+        numeric_features, categorical_features
+    )
 
     st.markdown("---")
     st.markdown("## 📂 Batch Predictions (CSV/Excel)")
