@@ -199,6 +199,13 @@ class InferencePipeline:
             est = base_estimator.estimators_
             trees = est if isinstance(est, list) else np.array(est).ravel().tolist()
             tree_preds = np.array([t.predict(X_t) for t in trees])
+
+            # If model was trained with transformed target (e.g. log1p),
+            # tree predictions are on transformed scale and must be inverted.
+            inverse_func = getattr(self.model, "inverse_func", None)
+            if callable(inverse_func):
+                tree_preds = inverse_func(tree_preds)
+
             lower = np.percentile(tree_preds, 2.5, axis=0) - preds
             upper = np.percentile(tree_preds, 97.5, axis=0) - preds
             return preds, lower, upper

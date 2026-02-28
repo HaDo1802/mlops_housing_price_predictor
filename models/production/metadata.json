@@ -1,24 +1,25 @@
 {
-  "model_type": "RandomForestRegressor",
-  "model_key": "random_forest",
+  "model_type": "HistGradientBoostingRegressor",
+  "model_key": "hist_gradient_boosting",
   "target_transform": "log1p",
   "hyperparameters": {
-    "n_estimators": 400,
-    "max_depth": 14,
-    "min_samples_leaf": 2,
-    "max_features": "sqrt"
+    "learning_rate": 0.03,
+    "max_iter": 1200,
+    "max_leaf_nodes": 63,
+    "min_samples_leaf": 8,
+    "l2_regularization": 0.0
   },
   "test_metrics": {
-    "r2": 0.6238006173456194,
-    "rmse": 1496693.3708479437,
-    "mae": 299051.4319132464,
-    "mse": 2240091046340.1807
+    "r2": 0.894104588799763,
+    "rmse": 794076.5415424596,
+    "mae": 236073.20986433062,
+    "mse": 630557553828.0336
   },
   "val_metrics": {
-    "r2": 0.8721040340017842,
-    "rmse": 389785.15925580135,
-    "mae": 150054.89640919238,
-    "mse": 151932470376.0704
+    "r2": 0.8725991697674702,
+    "rmse": 389029.9214900891,
+    "mae": 178067.1741862551,
+    "mse": 151344279814.58487
   },
   "feature_names": [
     "bedrooms",
