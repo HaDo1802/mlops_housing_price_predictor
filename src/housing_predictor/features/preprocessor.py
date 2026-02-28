@@ -27,6 +27,11 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
+from housing_predictor.features.schema import (
+    CATEGORICAL_FEATURES,
+    NUMERIC_FEATURES,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +63,9 @@ class ProductionPreprocessor:
         scaling_method: str = "standard",
         encoding_method: str = "onehot",
         handle_unknown: str = "ignore",
+        numeric_features: Optional[List[str]] = None,
+        categorical_features: Optional[List[str]] = None,
+        target_transform: str = "log1p",
         verbose: bool = True,
     ):
         """
@@ -67,39 +75,43 @@ class ProductionPreprocessor:
             scaling_method: 'standard', 'minmax', 'robust'
             encoding_method: 'onehot', 'label'
             handle_unknown: How to handle unknown categories ('ignore', 'error')
+            numeric_features: Explicit numeric feature list. Defaults to schema.
+            categorical_features: Explicit categorical feature list. Defaults to schema.
+            target_transform: Target transformation strategy ('none', 'log1p')
             verbose: Whether to log operations
         """
         self.scaling_method = scaling_method
         self.encoding_method = encoding_method
         self.handle_unknown = handle_unknown
+        self.target_transform = target_transform
         self.verbose = verbose
 
         # These will be fitted on training data
         self.preprocessor_pipeline = None
-        self.numeric_features = None
-        self.categorical_features = None
+        self.numeric_features = list(numeric_features or NUMERIC_FEATURES)
+        self.categorical_features = list(categorical_features or CATEGORICAL_FEATURES)
+        self.expected_features = self.numeric_features + self.categorical_features
         self.feature_names_out = None
         self.is_fitted = False
 
     def _identify_feature_types(self, X: pd.DataFrame) -> None:
         """
-        Mutating method to identify numeric and categorical features.
+        Validate and lock expected numeric/categorical feature groups.
 
         Args:
             X: Input dataframe
         """
-        self.numeric_features = X.select_dtypes(
-            include=["int64", "float64", "int32", "float32"]
-        ).columns.tolist()
-
-        self.categorical_features = X.select_dtypes(
-            include=["object", "category"]
-        ).columns.tolist()
+        missing_features = set(self.expected_features) - set(X.columns)
+        if missing_features:
+            raise ValueError(
+                f"Missing required features in input data: {sorted(missing_features)}. "
+                f"Expected model features: {sorted(self.expected_features)}"
+            )
 
         if self.verbose:
-            logger.info(f"Identified {len(self.numeric_features)} numeric features")
+            logger.info(f"Using {len(self.numeric_features)} numeric features")
             logger.info(
-                f"Identified {len(self.categorical_features)} categorical features"
+                f"Using {len(self.categorical_features)} categorical features"
             )
 
     def _get_scaler(self):
@@ -241,7 +253,7 @@ class ProductionPreprocessor:
         Args:
             X: Input dataframe
         """
-        expected_features = set(self.numeric_features + self.categorical_features)
+        expected_features = set(self.expected_features)
         actual_features = set(X.columns)
 
         missing_features = expected_features - actual_features
@@ -257,6 +269,44 @@ class ProductionPreprocessor:
             logger.warning(
                 f"Extra features in input data will be ignored: {extra_features}"
             )
+
+    def transform_target(self, y: pd.Series | np.ndarray) -> np.ndarray:
+        """
+        Transform target for training.
+
+        Args:
+            y: Raw target values on original scale.
+
+        Returns:
+            Transformed target values.
+        """
+        y_arr = np.asarray(y, dtype=float)
+        if self.target_transform == "none":
+            return y_arr
+        if self.target_transform == "log1p":
+            if np.any(y_arr <= -1):
+                raise ValueError(
+                    "log1p target transform requires all target values > -1."
+                )
+            return np.log1p(y_arr)
+        raise ValueError(f"Unsupported target_transform: {self.target_transform}")
+
+    def inverse_transform_target(self, y: pd.Series | np.ndarray) -> np.ndarray:
+        """
+        Invert transformed target back to the original scale.
+
+        Args:
+            y: Transformed target values.
+
+        Returns:
+            Target values on original scale.
+        """
+        y_arr = np.asarray(y, dtype=float)
+        if self.target_transform == "none":
+            return y_arr
+        if self.target_transform == "log1p":
+            return np.expm1(y_arr)
+        raise ValueError(f"Unsupported target_transform: {self.target_transform}")
 
     def _store_feature_names(self) -> None:
         """Store feature names after transformation"""
@@ -330,5 +380,3 @@ class ProductionPreprocessor:
 
         logger.info(f"Preprocessor loaded from {filepath}")
         return preprocessor
-
-

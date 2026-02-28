@@ -192,8 +192,9 @@ class InferencePipeline:
         preds = self.predict(X)
         X_t = self.preprocessor.transform(X)
 
-        if hasattr(self.model, "estimators_"):
-            est = self.model.estimators_
+        base_estimator = self._unwrap_model_estimator()
+        if hasattr(base_estimator, "estimators_"):
+            est = base_estimator.estimators_
             trees = est if isinstance(est, list) else np.array(est).ravel().tolist()
             tree_preds = np.array([t.predict(X_t) for t in trees])
             lower = np.percentile(tree_preds, 2.5, axis=0) - preds
@@ -223,11 +224,12 @@ class InferencePipeline:
 
     def get_feature_importance(self, top_n: int = 10) -> pd.DataFrame:
         """Return a DataFrame of feature importances (model must support it)."""
-        if not hasattr(self.model, "feature_importances_"):
+        base_estimator = self._unwrap_model_estimator()
+        if not hasattr(base_estimator, "feature_importances_"):
             raise ValueError("Model does not support feature_importances_.")
 
         feature_names = self.metadata.get("feature_names", [])
-        importances = self.model.feature_importances_
+        importances = base_estimator.feature_importances_
 
         df = pd.DataFrame({"feature": feature_names, "importance": importances})
         return df.sort_values("importance", ascending=False).head(top_n)
@@ -261,6 +263,14 @@ class InferencePipeline:
                 }
             )
         return results
+
+    def _unwrap_model_estimator(self):
+        """Return the inner estimator when a transformed target wrapper is used."""
+        if hasattr(self.model, "regressor_"):
+            return self.model.regressor_
+        if hasattr(self.model, "regressor"):
+            return self.model.regressor
+        return self.model
 
     def explain_prediction(
         self, features: Dict[str, Union[float, str]], top_n: int = 5

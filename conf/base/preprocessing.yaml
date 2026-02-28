@@ -3,3 +3,4 @@ scale_features: true
 scaling_method: "standard"
 encode_categorical: true
 encoding_method: "onehot"
+target_transform: "log1p"

@@ -25,6 +25,7 @@ class PreprocessingConfig:
     scaling_method: str = "standard"
     encode_categorical: bool = True
     encoding_method: str = "onehot"
+    target_transform: str = "log1p"
 
 
 @dataclass

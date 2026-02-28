@@ -43,12 +43,14 @@ class TrainingPipeline:
         self.preprocessor = ProductionPreprocessor(
             scaling_method=self.config.preprocessing.scaling_method,
             encoding_method=self.config.preprocessing.encoding_method,
+            target_transform=self.config.preprocessing.target_transform,
             verbose=True,
         )
         self.trainer = ModelTrainer(
             model_type=self.config.model.model_type,  # now actually used
             hyperparameters=self.config.model.hyperparameters,
             random_state=self.config.model.random_state,
+            use_log_target=(self.config.preprocessing.target_transform == "log1p"),
         )
         self.registry = ModelRegistryManager(
             registry_model_name=self.config.training.registry_model_name
@@ -71,8 +73,13 @@ class TrainingPipeline:
         if target_col not in selected:
             selected.append(target_col)
 
-        available = [f for f in selected if f in df_raw.columns]
-        self.df_selected = df_raw[available].copy()
+        missing = sorted(set(selected) - set(df_raw.columns))
+        if missing:
+            raise ValueError(
+                f"Configured features not found in input dataframe: {missing}. "
+                f"Available columns: {sorted(df_raw.columns.tolist())}"
+            )
+        self.df_selected = df_raw[selected].copy()
 
     def split_data(self):
         self.X_train, self.X_test, self.X_val, self.y_train, self.y_test, self.y_val = (
@@ -96,9 +103,11 @@ class TrainingPipeline:
         }
 
     def _build_metadata(self) -> dict:
+        inner_model = self.trainer.get_inner_model()
         return {
-            "model_type": type(self.trainer.model).__name__,
+            "model_type": type(inner_model).__name__,
             "model_key": self.config.model.model_type,
+            "target_transform": self.config.preprocessing.target_transform,
             "hyperparameters": self.config.model.hyperparameters,
             "test_metrics": self.metrics["test"],
             "val_metrics": self.metrics["validation"],
@@ -142,10 +151,11 @@ class TrainingPipeline:
                     "val_size": self.config.data.val_size,
                     "random_state": self.config.data.random_state,
                     "scaling_method": self.config.preprocessing.scaling_method,
+                    "target_transform": self.config.preprocessing.target_transform,
                     **self.config.model.hyperparameters,
                 }
             )
-            mlflow.set_tag("model_type", type(self.trainer.model).__name__)
+            mlflow.set_tag("model_type", type(self.trainer.get_inner_model()).__name__)
             mlflow.set_tag("model_key", self.config.model.model_type)
             mlflow.set_tag("project", "house_price_prediction")
             mlflow.set_tag("training_date", datetime.now(timezone.utc).isoformat())
@@ -219,7 +229,7 @@ class TrainingPipeline:
                 self._log_step("REGISTER + PROMOTE TO PRODUCTION")
                 registered_version = self.registry.register_model(
                     run_id=run_id,
-                    model_type=type(self.model).__name__,
+                    model_type=type(self.trainer.get_inner_model()).__name__,
                     model_key=self.config.model.model_type,
                 )
                 promote_result = promote_model_version(

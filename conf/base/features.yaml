@@ -1,12 +1,10 @@
 features:
   numeric:
-    - "Overall Qual"
-    - "Overall Cond"
-    - "Year Built"
-    - "Year Remod/Add"
-    - "Bedroom AbvGr"
-    - "Full Bath"
+    - "bedrooms"
+    - "bathrooms"
+    - "livingarea"
+    - "latitude"
+    - "longitude"
   categorical:
-    - "Neighborhood"
-    - "MS Zoning"
-    - "Bldg Type"
+    - "propertytype"
+    - "vegas_district"
