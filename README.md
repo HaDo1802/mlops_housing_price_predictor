@@ -17,8 +17,29 @@ Transforming the classic **beginner house price prediction** problem into a **pr
 - experiment tracking and model governance with MLflow
 - conditional promotion to production
 - FastAPI/UI serving 
-- feedback monitoring and drift checks
+- drift checks (PSI-based)
 - CI quality gates
+
+## Airflow Orchestration
+
+The project now includes two Airflow DAGs to automate training operations:
+
+- `data_ingestion_dag`: runs daily ingestion, then drift gate logic, then triggers retraining.
+- `retraining_dag`: runs retraining steps and writes training artifacts.
+
+### DAG: Data Ingestion + Drift Gate
+
+![Data Ingestion DAG](image/data_drift_dag.png)
+
+### DAG: Retraining Pipeline
+
+![Retraining DAG](image/retrain_dag.png)
+
+Current operating mode:
+
+- We are intentionally retraining daily for now to populate training history quickly.
+- This is acceptable because current training time is fast, and I did not registry training model automatically .
+- PSI drift detection logic is already implemented and can be used as the strict gate once dataset volume grows.
 
 
 
@@ -173,19 +194,15 @@ Why this pattern matters:
 - clean separation between model internals and consumer-facing interfaces
 - easier integration with product frontends and external services
 
-### 8) Post-Deployment Feedback and Drift Monitoring
+### 8) Post-Deployment Drift Monitoring
 
 Implemented in:
 
-- [feedback_collector.py](src/housing_predictor/monitoring/feedback_collector.py)
 - [drift.py](src/housing_predictor/monitoring/drift.py)
-- [run_feedback_monitor.py](pipelines/run_feedback_monitor.py)
 
 Current monitoring includes:
 
-- feedback agreement metrics
-- user range consistency checks
-- PSI drift for numeric features against reference data
+- PSI drift checks against a reference snapshot
 
 Why this pattern matters:
 
@@ -219,7 +236,7 @@ Raw data
   -> register/promote (if pass)
   -> sync production artifacts locally
   -> serve via API/UI
-  -> collect feedback + monitor drift
+  -> monitor drift
 ```
 
 ## Repository Structure
@@ -312,10 +329,10 @@ python pipelines/run_promote.py --list-only
 python pipelines/run_promote.py --model-name housing_price_predictor --version 3 --stage Production
 ```
 
-- Feedback + drift report:
+- Drift check utility:
 
 ```bash
-python pipelines/run_feedback_monitor.py
+python src/housing_predictor/monitoring/drift.py
 ```
 
 ## API Endpoints
@@ -351,7 +368,7 @@ Tests currently include:
 - unit tests for data split logic
 - unit tests for preprocessor fit/transform behavior
 - unit tests for regression metric outputs
-- unit tests for feedback collection and drift/monitoring utilities
+- unit tests for drift/monitoring utilities
 
 Run:
 
@@ -390,5 +407,4 @@ This project demonstrates practical skills in:
 ## Author
 
 Ha Do
-- GitHub: https://github.com/HaDo1802
 - Email: havando1802@gmail.com
