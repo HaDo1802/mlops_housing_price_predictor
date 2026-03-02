@@ -27,3 +27,4 @@ docs/
 docker/postgres-data/
 logs/
 plugins/
+notebooks/

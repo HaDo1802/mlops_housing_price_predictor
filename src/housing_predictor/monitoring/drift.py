@@ -269,6 +269,7 @@ def run_drift_check(
         "reason": reason,
     }
 
+
 if __name__ == "__main__":
     import sys
 
@@ -276,10 +277,9 @@ if __name__ == "__main__":
         level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s"
     )
 
-    
     REFERENCE_PATH = DEFAULT_REFERENCE_PATH
     PSI_THRESHOLD = PSI_THRESHOLD_MODERATE
-    
+
     SNAPSHOT_DATE = (date.today()).isoformat()
     logging.info("Running drift check for snapshot date: %s", SNAPSHOT_DATE)
     df = load_dashboard_df(snapshot_date=SNAPSHOT_DATE)
