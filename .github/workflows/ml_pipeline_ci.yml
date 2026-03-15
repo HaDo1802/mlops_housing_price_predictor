@@ -37,11 +37,11 @@ jobs:
 
       - name: Check formatting (black)
         run: |
-          python -m black --check src data tests serving pipelines api
+          python -m black --check src data tests serving pipelines dags
 
       - name: Lint (flake8)
         run: |
-          python -m flake8 src data tests serving pipelines api --max-line-length 120 --extend-ignore=E501,E402,F401,F541,W291,W293
+          python -m flake8 src data tests serving pipelines dags --max-line-length 120 --extend-ignore=E501,E402,F401,F541,W291,W293
 
       - name: Run tests
         run: |

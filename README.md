@@ -2,7 +2,7 @@
 
 # Housing Price Predictor: End-to-End MLOps Project
 
-![Project Cover](image/image.png)
+![Project Cover](image/architecture.png)
 
 
 

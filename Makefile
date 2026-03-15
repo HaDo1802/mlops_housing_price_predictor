@@ -5,7 +5,7 @@ PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 
 SRC := src serving pipelines conf
-QUALITY_TARGETS := src data tests serving pipelines api
+QUALITY_TARGETS := src data tests serving pipelines dags
 TEST_DIR := tests
 
 .PHONY: help install lint format test clean all vercel-preview vercel-prod
