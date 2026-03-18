@@ -1,0 +1,42 @@
+data:
+  random_state: 42
+  raw_data_path: data/raw/data_master.csv
+  target_column: price
+  test_size: 0.2
+  val_size: 0.1
+features:
+  categorical:
+  - propertytype
+  - vegas_district
+  numeric:
+  - bedrooms
+  - bathrooms
+  - livingarea
+model:
+  cv_folds: 5
+  hyperparameters:
+    max_depth: 14
+    max_features: sqrt
+    min_samples_leaf: 2
+    n_estimators: 400
+  model_type: random_forest
+  optimize_metric: r2
+  random_state: 42
+preprocessing:
+  encode_categorical: true
+  encoding_method: onehot
+  handle_missing: mean
+  handle_outliers: true
+  outlier_method: iqr
+  scale_features: true
+  scaling_method: standard
+  target_transform: log1p
+training:
+  experiment_name: house_price_prediction_test_2
+  log_dir: logs
+  log_metrics: true
+  model_output_dir: models/production
+  registry_model_name: housing_price_predictor
+  run_name: test_different model
+  save_artifacts: true
+  track_experiments: true

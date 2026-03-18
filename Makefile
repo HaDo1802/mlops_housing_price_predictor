@@ -8,7 +8,7 @@ SRC := src serving pipelines conf
 QUALITY_TARGETS := src data tests serving pipelines dags
 TEST_DIR := tests
 
-.PHONY: help install lint format test clean all vercel-preview vercel-prod
+.PHONY: help install lint format test clean all vercel-preview vercel-prod api
 
 help:
 	@printf "Targets:\\n"

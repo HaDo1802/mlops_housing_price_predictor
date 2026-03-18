@@ -55,7 +55,7 @@ def ingest_data_task(**context) -> None:
 def check_drift_task(**context) -> None:
     import pandas as pd
 
-    df = pd.read_csv(PROJECT_ROOT / "data" / "raw" / "data_master.csv")
+    # df = pd.read_csv(PROJECT_ROOT / "data" / "raw" / "data_master.csv")
 
     # ----------------------------------------------------------------
     # DRIFT LOGIC DISABLED — dataset too small for PSI to be reliable.

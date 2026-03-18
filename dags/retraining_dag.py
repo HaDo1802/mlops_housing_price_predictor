@@ -65,7 +65,9 @@ def validate_training_inputs_task(**context) -> None:
     pipeline = _build_pipeline()
     logging.info("Config path: %s", str(PROJECT_ROOT / "conf" / "config.yaml"))
     logging.info("Using training dataset: %s", pipeline.config.data.raw_data_path)
-    context["ti"].xcom_push(key="training_dataset_path", value=pipeline.config.data.raw_data_path)
+    context["ti"].xcom_push(
+        key="training_dataset_path", value=pipeline.config.data.raw_data_path
+    )
 
 
 def load_and_select_task(**context) -> None:
@@ -123,7 +125,9 @@ def train_and_save_task(**context) -> None:
 
 
 def notify_result_task(**context) -> None:
-    metrics = context["ti"].xcom_pull(task_ids="train_and_save", key="training_metrics") or {}
+    metrics = (
+        context["ti"].xcom_pull(task_ids="train_and_save", key="training_metrics") or {}
+    )
 
     conf = (context.get("dag_run").conf if context.get("dag_run") else None) or {}
     drift_summary = conf.get("drift_summary") or {}

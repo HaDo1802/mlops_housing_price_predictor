@@ -8,6 +8,7 @@
 .vscode/
 .DS_Store
 
+__init__.py
 __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
@@ -24,3 +25,7 @@ AWSCLIV2.pkg
 
 # Generated data and local experimentation artifacts
 data/raw/
+notebooks/
+
+learning.md
+docs/

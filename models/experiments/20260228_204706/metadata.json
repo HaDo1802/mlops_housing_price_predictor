@@ -1,0 +1,60 @@
+{
+  "model_type": "XGBRegressor",
+  "model_key": "xgboost",
+  "target_transform": "log1p",
+  "hyperparameters": {
+    "n_estimators": 1200,
+    "learning_rate": 0.03,
+    "max_depth": 6,
+    "min_child_weight": 4,
+    "subsample": 0.9,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 1.0,
+    "objective": "reg:squarederror",
+    "tree_method": "hist"
+  },
+  "test_metrics": {
+    "r2": 0.9527656179658296,
+    "rmse": 530338.2054834926,
+    "mae": 203922.16821732954,
+    "mse": 281258612195.4512
+  },
+  "val_metrics": {
+    "r2": 0.9277740036926192,
+    "rmse": 292916.3724757611,
+    "mae": 148638.87204367897,
+    "mse": 85800001264.35881
+  },
+  "feature_names": [
+    "bedrooms",
+    "bathrooms",
+    "livingarea",
+    "propertytype_CONDO",
+    "propertytype_MOBILE",
+    "propertytype_MULTI_FAMILY",
+    "propertytype_SINGLE_FAMILY",
+    "propertytype_TOWNHOUSE",
+    "vegas_district_Anthem",
+    "vegas_district_Centennial",
+    "vegas_district_Downtown Las Vegas",
+    "vegas_district_Enterprise",
+    "vegas_district_Green Valley",
+    "vegas_district_Mountains Edge",
+    "vegas_district_North Las Vegas",
+    "vegas_district_Paradise",
+    "vegas_district_Spring Valley",
+    "vegas_district_Summerlin",
+    "vegas_district_The Strip",
+    "vegas_district_Winchester"
+  ],
+  "prediction_interval": {
+    "method": "conformal_symmetric_abs_residual",
+    "alpha": 0.05,
+    "coverage": 0.95,
+    "quantile_abs_error": 523535.3125,
+    "calibration_size": 110
+  },
+  "train_size": 766,
+  "val_size": 110,
+  "test_size": 220
+}

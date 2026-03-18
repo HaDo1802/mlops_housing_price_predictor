@@ -1,0 +1,51 @@
+{
+  "model_type": "HistGradientBoostingRegressor",
+  "model_key": "hist_gradient_boosting",
+  "target_transform": "log1p",
+  "hyperparameters": {
+    "learning_rate": 0.03,
+    "max_iter": 1200,
+    "max_leaf_nodes": 63,
+    "min_samples_leaf": 8,
+    "l2_regularization": 0.0
+  },
+  "test_metrics": {
+    "r2": 0.4220600897295165,
+    "rmse": 1855090.6602819376,
+    "mae": 352120.2160014505,
+    "mse": 3441361357865.2754,
+    "cheap_segment_cutoff_p25": 380000.0,
+    "cheap_segment_mae": 53483.68705378715
+  },
+  "val_metrics": {
+    "r2": 0.7561331592071021,
+    "rmse": 538236.6324155921,
+    "mae": 175079.85890923283,
+    "mse": 289698672474.07715
+  },
+  "feature_names": [
+    "bedrooms",
+    "bathrooms",
+    "livingarea",
+    "latitude",
+    "longitude",
+    "propertytype_CONDO",
+    "propertytype_MOBILE",
+    "propertytype_MULTI_FAMILY",
+    "propertytype_SINGLE_FAMILY",
+    "propertytype_TOWNHOUSE"
+  ],
+  "prediction_interval": {
+    "method": "lognormal_symmetric_residual_std",
+    "alpha": 0.05,
+    "coverage": 0.95,
+    "stdev_log_residual": 0.20674826057082815,
+    "z_score": 1.9599639845400536,
+    "interval_half_width_log": 0.4052191445851256,
+    "degrees_of_freedom": 108,
+    "calibration_size": 110
+  },
+  "train_size": 758,
+  "val_size": 110,
+  "test_size": 220
+}

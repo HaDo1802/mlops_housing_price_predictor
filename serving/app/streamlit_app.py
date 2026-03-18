@@ -796,15 +796,12 @@ def main():
                         "upper": float(upper),
                         "top_features": top_features,
                     }
-                    st.session_state.last_inputs = inputs
-
                 except Exception as e:
                     st.error(f"❌ Error making prediction: {str(e)}")
                     logger.error(f"Prediction error: {str(e)}", exc_info=True)
 
-    if "last_result" in st.session_state and "last_inputs" in st.session_state:
+    if "last_result" in st.session_state:
         result = st.session_state.last_result
-        last_inputs = st.session_state.last_inputs
 
         # Display results
         display_prediction_results(
