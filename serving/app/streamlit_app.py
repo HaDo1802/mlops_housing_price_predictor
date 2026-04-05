@@ -37,48 +37,15 @@ for p in (PROJECT_ROOT, SRC_ROOT):
     if p_str not in sys.path:
         sys.path.insert(0, p_str)
 
-from housing_predictor.features import schema as feature_schema
-
-NUMERIC_FEATURES = list(
-    getattr(
-        feature_schema,
-        "NUMERIC_FEATURES",
-        ["bedrooms", "bathrooms", "livingarea", "latitude", "longitude"],
-    )
+from housing_predictor.features.training_schema import (
+    CATEGORICAL_FEATURES,
+    NUMERIC_FEATURES,
 )
-CATEGORICAL_FEATURES = list(
-    getattr(feature_schema, "CATEGORICAL_FEATURES", ["propertytype"])
+from serving.api.feature_map import (
+    CATEGORICAL_OPTIONS,
+    FEATURE_DISPLAY_LABELS,
+    VEGAS_DISTRICT_CENTROIDS,
 )
-FEATURE_DISPLAY_LABELS = dict(
-    getattr(
-        feature_schema,
-        "FEATURE_DISPLAY_LABELS",
-        {
-            "bedrooms": "Bedrooms",
-            "bathrooms": "Bathrooms",
-            "livingarea": "Living Area (sqft)",
-            "latitude": "Latitude",
-            "longitude": "Longitude",
-            "propertytype": "Property Type",
-        },
-    )
-)
-CATEGORICAL_OPTIONS = dict(
-    getattr(
-        feature_schema,
-        "CATEGORICAL_OPTIONS",
-        {
-            "propertytype": [
-                "SINGLE_FAMILY",
-                "TOWNHOUSE",
-                "CONDO",
-                "MULTI_FAMILY",
-                "MOBILE",
-            ],
-        },
-    )
-)
-VEGAS_DISTRICT_CENTROIDS = dict(getattr(feature_schema, "VEGAS_DISTRICT_CENTROIDS", {}))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

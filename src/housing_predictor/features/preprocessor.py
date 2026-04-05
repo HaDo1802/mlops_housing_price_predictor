@@ -27,7 +27,7 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
-from housing_predictor.features.schema import (
+from housing_predictor.features.training_schema import (
     CATEGORICAL_FEATURES,
     NUMERIC_FEATURES,
 )

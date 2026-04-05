@@ -13,7 +13,7 @@ from serving.api.schemas import (
     HouseFeatures,
     PredictionResponse,
 )
-from housing_predictor.features.schema import (
+from serving.api.feature_map import (
     API_TO_MODEL_FIELDS,
     VEGAS_DISTRICT_CENTROIDS,
 )

@@ -16,6 +16,8 @@ class HouseFeatures(BaseModel):
     livingarea: float = Field(..., gt=0)
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
+    normalized_lot_area_value: Optional[float] = None
+    days_on_zillow: Optional[float] = None
     propertytype: str
     vegas_district: Optional[str] = None
 

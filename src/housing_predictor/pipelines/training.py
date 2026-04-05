@@ -17,7 +17,10 @@ from housing_predictor.config_manager import ConfigManager
 from housing_predictor.data.loader import load_dataframe
 from housing_predictor.data.splitter import DataSplitter
 from housing_predictor.features.preprocessor import ProductionPreprocessor
-from housing_predictor.features.schema import DROP_COLUMNS, EXCLUDED_PROPERTY_TYPES
+from housing_predictor.features.training_schema import (
+    DROP_COLUMNS,
+    EXCLUDED_PROPERTY_TYPES,
+)
 from housing_predictor.models.check_metric import check_metric_against_production
 from housing_predictor.models.evaluator import regression_metrics
 from housing_predictor.models.promote import (

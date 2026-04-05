@@ -1,12 +1,12 @@
 """Model information endpoints."""
 
 from fastapi import APIRouter, HTTPException, Request
-from housing_predictor.features.schema import (
+
+from housing_predictor.features.training_schema import (
     CATEGORICAL_FEATURES,
-    CATEGORICAL_OPTIONS,
-    FEATURE_DISPLAY_LABELS,
     NUMERIC_FEATURES,
 )
+from serving.api.feature_map import CATEGORICAL_OPTIONS, FEATURE_DISPLAY_LABELS
 
 router = APIRouter(prefix="/model", tags=["Model"])
 
