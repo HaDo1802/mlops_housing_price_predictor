@@ -1,12 +1,12 @@
 import os
 import logging
 from pathlib import Path
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
-import psycopg2
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 from dotenv import load_dotenv
-from datetime import timedelta
 
 load_dotenv()
 
@@ -15,8 +15,6 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-SNAPSHOT_DATE = (date.today() - timedelta(days=1)).isoformat()
 
 
 def _db_conn_kwargs() -> dict:
@@ -31,10 +29,9 @@ def _db_conn_kwargs() -> dict:
 
 
 def _validate_db_env() -> None:
-    conn_kwargs = _db_conn_kwargs()
-    missing = [k for k in ("host", "user", "password") if not conn_kwargs.get(k)]
+    cfg = _db_conn_kwargs()
+    missing = [k for k in ("host", "user", "password") if not cfg.get(k)]
     if missing:
-        logger.error("Missing required Supabase DB environment variables: %s", missing)
         raise RuntimeError(
             "Missing Supabase DB env vars: "
             + ", ".join(f"SUPABASE_DB_{m.upper()}" for m in missing)
@@ -42,77 +39,67 @@ def _validate_db_env() -> None:
     logger.info("Supabase DB env validation passed.")
 
 
-def _run_sql(query: str, params: dict | None = None) -> pd.DataFrame:
+def _get_engine():
     _validate_db_env()
-    logger.info("Executing query against Supabase.")
-    # Prefer SQLAlchemy engine to avoid pandas DBAPI2 warning.
-    try:
-        from sqlalchemy import create_engine, text
-        from sqlalchemy.engine import URL
-
-        cfg = _db_conn_kwargs()
-        db_url = URL.create(
-            drivername="postgresql+psycopg2",
-            username=cfg["user"],
-            password=cfg["password"],
-            host=cfg["host"],
-            port=int(cfg["port"]) if cfg.get("port") else None,
-            database=cfg["dbname"],
-            query={"sslmode": cfg["sslmode"]},
-        )
-        engine = create_engine(db_url)
-        with engine.connect() as conn:
-            sql = text(query)
-            df = pd.read_sql_query(sql, conn, params=params)
-            logger.info("Query completed via SQLAlchemy. Rows fetched: %d", len(df))
-            return df
-    except Exception as exc:
-        logger.warning(
-            "SQLAlchemy path failed (%s). Falling back to psycopg2 connection.", exc
-        )
-        # Fallback keeps script functional if SQLAlchemy is unavailable.
-        with psycopg2.connect(**_db_conn_kwargs()) as conn:
-            df = pd.read_sql_query(query, conn, params=params)
-            logger.info(
-                "Query completed via psycopg2 fallback. Rows fetched: %d", len(df)
-            )
-            return df
+    cfg = _db_conn_kwargs()
+    db_url = URL.create(
+        drivername="postgresql+psycopg2",
+        username=cfg["user"],
+        password=cfg["password"],
+        host=cfg["host"],
+        port=int(cfg["port"]),
+        database=cfg["dbname"],
+        query={"sslmode": cfg["sslmode"]},
+    )
+    return create_engine(db_url)
 
 
-def load_dashboard_df(snapshot_date: str | None = None) -> pd.DataFrame:
-    query = """
-        select
-            f.price,
-            f.bedrooms,
-            f.bathrooms,
-            f.living_area as livingarea,
-            d.property_type as propertytype,
-            f.listing_status as listingstatus,
-            d.vegas_district,
-            d.latitude,
-            d.longitude,
-            f.snapshot_date
-        from gold.fact_property_latest f
-        inner join gold.dim_property d
-            on d.property_id = f.property_id
-        left join gold.dim_date dd
-            on dd.date_day = f.snapshot_date
+def _run_sql(query: str, params: dict | None = None) -> pd.DataFrame:
     """
-    params = None
-    if snapshot_date:
-        query += "\nwhere f.snapshot_date <= %(snapshot_date)s"
-        params = {"snapshot_date": snapshot_date}
-        logger.info("Applying snapshot_date filter: %s", snapshot_date)
-    return _run_sql(query, params=params)
+    Run a SQL query and return a DataFrame.
+    Use :key placeholders in query string, e.g. WHERE date = :snapshot_date.
+    """
+    logger.info("Executing query against Supabase.")
+    engine = _get_engine()
+    with engine.connect() as conn:
+        sql = text(query)
+        if params:
+            sql = sql.bindparams(**params)
+        df = pd.read_sql_query(sql, conn)
+        logger.info("Query completed. Rows fetched: %d", len(df))
+        return df
+
+
+def load_dashboard_df() -> pd.DataFrame:
+    """
+    Load the latest snapshot of every property from gold.mart_property_current.
+
+    This view is deduplicated — one row per property_id reflecting its most
+    recent values. No time-series joins needed.
+
+    Columns: property_id, snapshot_date, street_address, city, state,
+             zip_code, vegas_district, latitude, longitude, property_type,
+             price, zestimate, rentzestimate, bedrooms, bathrooms,
+             living_area, normalized_lot_area_value, normalized_lot_area_unit,
+             days_on_zillow, listing_status, price_per_sqft
+    """
+    query = """
+        SELECT *
+        FROM gold.mart_property_current
+        WHERE price IS NOT NULL
+          AND price > 0
+    """
+    logger.info("Loading gold.mart_property_current ...")
+    return _run_sql(query)
 
 
 if __name__ == "__main__":
     logger.info("Starting Supabase extract job.")
-    selected_date = SNAPSHOT_DATE
-    data = load_dashboard_df(snapshot_date=selected_date)
+    df = load_dashboard_df()
+
     project_root = Path(__file__).resolve().parents[1]
     output_path = project_root / "data" / "raw" / "data_master.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Saving dataset to %s", output_path)
-    data.to_csv(output_path, index=False)
-    logger.info("Saved %d rows to %s", len(data), output_path)
+
+    df.to_csv(output_path, index=False)
+    logger.info("Saved %d rows to %s", len(df), output_path)
