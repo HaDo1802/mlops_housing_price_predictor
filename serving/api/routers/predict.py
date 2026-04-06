@@ -42,13 +42,6 @@ def _get_top_features(pipeline, df: pd.DataFrame | None = None):
     try:
         return pipeline.get_feature_importance(top_n=5).to_dict("records")
     except Exception:
-        if df is not None:
-            try:
-                return pipeline.get_local_feature_importance(df, top_n=5).to_dict(
-                    "records"
-                )
-            except Exception:
-                return None
         return None
 
 

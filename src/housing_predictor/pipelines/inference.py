@@ -9,7 +9,7 @@ import json
 import logging
 import pickle
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -92,10 +92,13 @@ class InferencePipeline:
                     self.model_name, self.version
                 )
             else:
-                latest = self.client.get_latest_versions(
-                    self.model_name, stages=[self.stage]
+                versions = self.client.search_model_versions(
+                    f"name='{self.model_name}'"
                 )
-                if not latest:
+                stage_versions = [
+                    mv for mv in versions if getattr(mv, "current_stage", None) == self.stage
+                ]
+                if not stage_versions:
                     logger.warning(
                         "No MLflow model found for '%s' at stage '%s'.",
                         self.model_name,
@@ -103,7 +106,7 @@ class InferencePipeline:
                     )
                     return False
                 self.model_version_info = sorted(
-                    latest, key=lambda mv: int(mv.version), reverse=True
+                    stage_versions, key=lambda mv: int(mv.version), reverse=True
                 )[0]
 
             model_uri = (
@@ -195,24 +198,6 @@ class InferencePipeline:
         X_t = self.preprocessor.transform(X)
 
         interval_cfg = self.metadata.get("prediction_interval") or {}
-        if interval_cfg.get("method") == "conformal_symmetric_abs_residual":
-            q = float(interval_cfg.get("quantile_abs_error", 0.0))
-            if q > 0:
-                delta = np.full_like(preds, q, dtype=float)
-                return preds, -delta, delta
-        if interval_cfg.get("method") == "gaussian_symmetric_residual_std":
-            interval = float(interval_cfg.get("interval_half_width", 0.0))
-            if interval > 0:
-                delta = np.full_like(preds, interval, dtype=float)
-                return preds, -delta, delta
-        if interval_cfg.get("method") == "lognormal_symmetric_residual_std":
-            interval_log = float(interval_cfg.get("interval_half_width_log", 0.0))
-            if interval_log > 0:
-                pred_nonneg = np.maximum(preds, 0.0)
-                pred_plus_1 = pred_nonneg + 1.0
-                lower_abs = np.maximum(0.0, pred_plus_1 * np.exp(-interval_log) - 1.0)
-                upper_abs = pred_plus_1 * np.exp(interval_log) - 1.0
-                return preds, lower_abs - preds, upper_abs - preds
         if interval_cfg.get("method") == "segmented_relative_error_quantile":
             edges = interval_cfg.get("segment_edges") or []
             rel_q_by_seg = interval_cfg.get("relative_error_quantiles_by_segment")
@@ -301,38 +286,6 @@ class InferencePipeline:
         df = pd.DataFrame({"feature": feature_names, "importance": importances})
         return df.sort_values("importance", ascending=False).head(top_n)
 
-    def get_local_feature_importance(
-        self, X: pd.DataFrame, top_n: int = 10, delta: float = 0.25
-    ) -> pd.DataFrame:
-        """
-        Fallback local importance by finite-difference sensitivity on transformed inputs.
-        Returns absolute prediction change per transformed feature.
-        """
-        self._validate_input(X)
-        X_t = np.asarray(self.preprocessor.transform(X), dtype=float)
-        if X_t.ndim != 2 or X_t.shape[0] == 0:
-            raise ValueError("Input must contain at least one sample.")
-
-        x0 = X_t[0].copy()
-        base_pred = float(self.model.predict(x0.reshape(1, -1))[0])
-        names = self.metadata.get("feature_names", [])
-        if len(names) != x0.shape[0]:
-            names = [f"feature_{i}" for i in range(x0.shape[0])]
-
-        impacts = []
-        for idx in range(x0.shape[0]):
-            x_up = x0.copy()
-            x_dn = x0.copy()
-            x_up[idx] = x_up[idx] + delta
-            x_dn[idx] = x_dn[idx] - delta
-            pred_up = float(self.model.predict(x_up.reshape(1, -1))[0])
-            pred_dn = float(self.model.predict(x_dn.reshape(1, -1))[0])
-            impact = max(abs(pred_up - base_pred), abs(pred_dn - base_pred))
-            impacts.append(float(impact))
-
-        df = pd.DataFrame({"feature": names, "importance": impacts})
-        return df.sort_values("importance", ascending=False).head(top_n)
-
     def get_model_info(self) -> Dict:
         """Return basic model information."""
         return {
@@ -342,27 +295,6 @@ class InferencePipeline:
             "metadata": self.metadata,
         }
 
-    def list_available_models(self) -> List[Dict]:
-        """List registered MLflow versions (only available when loaded from MLflow)."""
-        if self._loaded_from != "mlflow" or self.client is None:
-            return [{"note": "MLflow not available; model loaded from local files."}]
-
-        versions = self.client.search_model_versions(f"name='{self.model_name}'")
-        results = []
-        for mv in sorted(versions, key=lambda item: int(item.version)):
-            run = self.client.get_run(mv.run_id)
-            results.append(
-                {
-                    "version": mv.version,
-                    "stage": mv.current_stage,
-                    "run_id": mv.run_id,
-                    "status": mv.status,
-                    "test_r2": run.data.metrics.get("test_r2"),
-                    "val_r2": run.data.metrics.get("val_r2"),
-                }
-            )
-        return results
-
     def _unwrap_model_estimator(self):
         """Return the inner estimator when a transformed target wrapper is used."""
         if hasattr(self.model, "regressor_"):
@@ -370,23 +302,6 @@ class InferencePipeline:
         if hasattr(self.model, "regressor"):
             return self.model.regressor
         return self.model
-
-    def explain_prediction(
-        self, features: Dict[str, Union[float, str]], top_n: int = 5
-    ) -> Dict:
-        """Explain a single prediction with top feature importances."""
-        prediction = self.predict_single(features)
-        try:
-            importance_df = self.get_feature_importance(top_n)
-            return {
-                "prediction": prediction,
-                "top_features": importance_df.to_dict("records"),
-            }
-        except ValueError:
-            return {
-                "prediction": prediction,
-                "message": "Model does not support feature importance.",
-            }
 
 
 # ---------------------------------------------------------------------------
