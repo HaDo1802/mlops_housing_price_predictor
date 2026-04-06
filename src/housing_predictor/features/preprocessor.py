@@ -13,7 +13,7 @@ This module answers: "How do we preprocess to avoid data leakage?"
 import logging
 import pickle
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -68,18 +68,6 @@ class ProductionPreprocessor:
         target_transform: str = "log1p",
         verbose: bool = True,
     ):
-        """
-        Initialize preprocessor.
-
-        Args:
-            scaling_method: 'standard', 'minmax', 'robust'
-            encoding_method: 'onehot', 'label'
-            handle_unknown: How to handle unknown categories ('ignore', 'error')
-            numeric_features: Explicit numeric feature list. Defaults to schema.
-            categorical_features: Explicit categorical feature list. Defaults to schema.
-            target_transform: Target transformation strategy ('none', 'log1p')
-            verbose: Whether to log operations
-        """
         self.scaling_method = scaling_method
         self.encoding_method = encoding_method
         self.handle_unknown = handle_unknown
@@ -95,12 +83,7 @@ class ProductionPreprocessor:
         self.is_fitted = False
 
     def _identify_feature_types(self, X: pd.DataFrame) -> None:
-        """
-        Validate and lock expected numeric/categorical feature groups.
-
-        Args:
-            X: Input dataframe
-        """
+        """Validate and lock expected numeric and categorical feature groups."""
         missing_features = set(self.expected_features) - set(X.columns)
         if missing_features:
             raise ValueError(
@@ -113,7 +96,7 @@ class ProductionPreprocessor:
             logger.info(f"Using {len(self.categorical_features)} categorical features")
 
     def _get_scaler(self):
-        """Get the appropriate scaler based on configuration"""
+        """Return the configured scaler."""
         if self.scaling_method == "standard":
             return StandardScaler()
         elif self.scaling_method == "minmax":
@@ -124,7 +107,7 @@ class ProductionPreprocessor:
             raise ValueError(f"Unknown scaling method: {self.scaling_method}")
 
     def _get_encoder(self):
-        """Get the appropriate encoder based on configuration"""
+        """Return the configured encoder."""
         if self.encoding_method == "onehot":
             return OneHotEncoder(
                 sparse_output=False,
@@ -135,16 +118,11 @@ class ProductionPreprocessor:
             raise ValueError(f"Unknown encoding method: {self.encoding_method}")
 
     def _get_imputer(self, strategy: str):
-        """Get the appropriate imputer based on configuration"""
+        """Return the configured imputer."""
         return SimpleImputer(strategy=strategy)
 
     def _build_preprocessor(self) -> ColumnTransformer:
-        """
-        Build the preprocessing pipeline.
-
-        Returns:
-            ColumnTransformer with scaling and encoding
-        """
+        """Build the preprocessing pipeline."""
         transformers = []
 
         # Add numeric transformer
@@ -174,15 +152,7 @@ class ProductionPreprocessor:
         return preprocessor
 
     def fit_transform(self, X: pd.DataFrame) -> np.ndarray:
-        """
-        Fit preprocessor on training data and transform it.
-
-        Args:
-            X: Training features
-
-        Returns:
-            Transformed training features
-        """
+        """Fit the preprocessor on training data and transform it."""
         if self.is_fitted:
             logger.warning(
                 "Preprocessor is already fitted! "
@@ -212,20 +182,7 @@ class ProductionPreprocessor:
         return X_transformed
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
-        """
-        Transform data using fitted preprocessor.
-
-        Use this for:
-        - Validation data
-        - Test data
-        - Production data
-
-        Args:
-            X: Features to transform
-
-        Returns:
-            Transformed features
-        """
+        """Transform data using the fitted preprocessor."""
         if not self.is_fitted:
             raise ValueError(
                 "Preprocessor not fitted yet! Call fit_transform() on training data first."
@@ -245,12 +202,7 @@ class ProductionPreprocessor:
         return X_transformed
 
     def _validate_input_features(self, X: pd.DataFrame) -> None:
-        """
-        Validate that input has the same features as training data.
-
-        Args:
-            X: Input dataframe
-        """
+        """Validate that input has the same features as training data."""
         expected_features = set(self.expected_features)
         actual_features = set(X.columns)
 
@@ -268,46 +220,8 @@ class ProductionPreprocessor:
                 f"Extra features in input data will be ignored: {extra_features}"
             )
 
-    def transform_target(self, y: pd.Series | np.ndarray) -> np.ndarray:
-        """
-        Transform target for training.
-
-        Args:
-            y: Raw target values on original scale.
-
-        Returns:
-            Transformed target values.
-        """
-        y_arr = np.asarray(y, dtype=float)
-        if self.target_transform == "none":
-            return y_arr
-        if self.target_transform == "log1p":
-            if np.any(y_arr <= -1):
-                raise ValueError(
-                    "log1p target transform requires all target values > -1."
-                )
-            return np.log1p(y_arr)
-        raise ValueError(f"Unsupported target_transform: {self.target_transform}")
-
-    def inverse_transform_target(self, y: pd.Series | np.ndarray) -> np.ndarray:
-        """
-        Invert transformed target back to the original scale.
-
-        Args:
-            y: Transformed target values.
-
-        Returns:
-            Target values on original scale.
-        """
-        y_arr = np.asarray(y, dtype=float)
-        if self.target_transform == "none":
-            return y_arr
-        if self.target_transform == "log1p":
-            return np.expm1(y_arr)
-        raise ValueError(f"Unsupported target_transform: {self.target_transform}")
-
     def _store_feature_names(self) -> None:
-        """Store feature names after transformation"""
+        """Store feature names after transformation."""
         feature_names = []
 
         # Get numeric feature names
@@ -325,29 +239,14 @@ class ProductionPreprocessor:
         self.feature_names_out = feature_names
 
     def get_feature_names(self) -> List[str]:
-        """
-        Get feature names after transformation.
-
-        Useful for:
-        - Feature importance analysis
-        - Model interpretability
-        - Debugging
-
-        Returns:
-            List of feature names
-        """
+        """Return feature names after transformation."""
         if not self.is_fitted:
             raise ValueError("Preprocessor not fitted yet!")
 
         return self.feature_names_out
 
     def save(self, filepath: str) -> None:
-        """
-        Save fitted preprocessor to disk.
-
-        Args:
-            filepath: Path to save preprocessor
-        """
+        """Save the fitted preprocessor to disk."""
         if not self.is_fitted:
             raise ValueError("Cannot save unfitted preprocessor!")
 
@@ -361,15 +260,7 @@ class ProductionPreprocessor:
 
     @staticmethod
     def load(filepath: str) -> "ProductionPreprocessor":
-        """
-        Load fitted preprocessor from disk.
-
-        Args:
-            filepath: Path to saved preprocessor
-
-        Returns:
-            Loaded preprocessor
-        """
+        """Load a fitted preprocessor from disk."""
         with open(filepath, "rb") as f:
             preprocessor = pickle.load(f)
 
