@@ -43,4 +43,5 @@ OUTLIER_FILTERS = {
 
 EXCLUDED_PROPERTY_TYPES = [
     "MOBILE",  # priced off lot-lease, not sqft — median $124k vs $490k overall
+    "MULTI_FAMILY",  # different asset class and pricing dynamics than single-home stock
 ]

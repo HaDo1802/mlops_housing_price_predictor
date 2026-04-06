@@ -30,10 +30,7 @@ def test_training_artifacts_can_be_loaded_by_inference_pipeline(tmp_path, raw_tr
         yaml.safe_dump(config, f, sort_keys=False)
 
     training = TrainingPipeline(str(config_path))
-    training.load_and_select()
-    training.split_data()
-    training.preprocess_data()
-    training.train_and_eval()
+    training.run(track=False, promote=False)
 
     artifact_dir = training.save_artifacts(str(tmp_path / "artifacts"))
     inference = InferencePipeline(local_model_dir=str(artifact_dir))

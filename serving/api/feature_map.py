@@ -29,7 +29,6 @@ CATEGORICAL_OPTIONS = {
         "SINGLE_FAMILY",
         "TOWNHOUSE",
         "CONDO",
-        "MULTI_FAMILY",
     ],
     "vegas_district": [
         "Summerlin",

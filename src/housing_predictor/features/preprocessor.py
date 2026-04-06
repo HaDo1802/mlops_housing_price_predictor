@@ -129,7 +129,7 @@ class ProductionPreprocessor:
         if self.numeric_features:
             numeric_transformer = Pipeline(
                 steps=[
-                    ("imputer", self._get_imputer("mean")),
+                    ("imputer", self._get_imputer("median")),
                     ("scaler", self._get_scaler()),
                 ]
             )

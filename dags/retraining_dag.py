@@ -72,41 +72,58 @@ def validate_training_inputs_task(**context) -> None:
 
 def load_and_select_task(**context) -> None:
     pipeline = _build_pipeline()
-    pipeline.load_and_select()
+    df_selected = pipeline._load_and_clean_data()
     logging.info(
         "Loaded rows=%s cols=%s",
-        len(pipeline.df_selected),
-        len(pipeline.df_selected.columns),
+        len(df_selected),
+        len(df_selected.columns),
     )
 
 
 def split_data_task(**context) -> None:
+    from sklearn.model_selection import train_test_split
+
     pipeline = _build_pipeline()
-    pipeline.load_and_select()
-    pipeline.split_data()
+    df_selected = pipeline._load_and_clean_data()
+    X = df_selected.drop(columns=[pipeline.config.data.target_column])
+    y = df_selected[pipeline.config.data.target_column]
+    X_train, X_test, _, _ = train_test_split(
+        X,
+        y,
+        test_size=pipeline.config.data.test_size,
+        random_state=pipeline.config.data.random_state,
+    )
     logging.info(
-        "Train rows=%s | Test rows=%s", len(pipeline.X_train), len(pipeline.X_test)
+        "Train rows=%s | Test rows=%s", len(X_train), len(X_test)
     )
 
 
 def preprocess_data_task(**context) -> None:
+    from sklearn.model_selection import train_test_split
+
     pipeline = _build_pipeline()
-    pipeline.load_and_select()
-    pipeline.split_data()
-    pipeline.preprocess_data()
+    df_selected = pipeline._load_and_clean_data()
+    X = df_selected.drop(columns=[pipeline.config.data.target_column])
+    y = df_selected[pipeline.config.data.target_column]
+    X_train, X_test, y_train, _ = train_test_split(
+        X,
+        y,
+        test_size=pipeline.config.data.test_size,
+        random_state=pipeline.config.data.random_state,
+    )
+    X_train, y_train = pipeline._remove_outliers(X_train, y_train)
+    X_train_transformed = pipeline.preprocessor.fit_transform(X_train)
+    X_test_transformed = pipeline.preprocessor.transform(X_test)
     logging.info(
         "Preprocessed shapes | train=%s test=%s",
-        getattr(pipeline.X_train_transformed, "shape", None),
-        getattr(pipeline.X_test_transformed, "shape", None),
+        getattr(X_train_transformed, "shape", None),
+        getattr(X_test_transformed, "shape", None),
     )
 
 
 def train_and_save_task(**context) -> None:
     pipeline = _build_pipeline()
-    pipeline.load_and_select()
-    pipeline.split_data()
-    pipeline.preprocess_data()
-    pipeline.train_and_eval()
+    pipeline.run(track=True, promote=False)
 
     artifact_dir = PROJECT_ROOT / "models" / "experiments" / "airflow_latest"
     saved_path = pipeline.save_artifacts(output_dir=str(artifact_dir))
