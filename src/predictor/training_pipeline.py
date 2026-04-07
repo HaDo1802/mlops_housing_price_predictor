@@ -20,6 +20,7 @@ from predictor.data_ingest import DataIngestor
 from predictor.models import TrainerFactory
 from predictor.preprocessor import ProductionPreprocessor
 from predictor.registry import ModelRegistryManager, save_local_production_from_objects
+from predictor.schema import CATEGORICAL_FEATURES, MODEL_FEATURES, NUMERIC_FEATURES
 from predictor.utils import evaluate_predictions
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,8 @@ class TrainingPipeline:
 
         self.data_ingestor = DataIngestor(self.config)
         self.preprocessor = ProductionPreprocessor(
-            numeric_features=self.config.features.numeric,
-            categorical_features=self.config.features.categorical,
+            numeric_features=NUMERIC_FEATURES,
+            categorical_features=CATEGORICAL_FEATURES,
             scaling_method=self.config.preprocessing.scaling_method,
             encoding_method=self.config.preprocessing.encoding_method,
             target_transform=self.config.preprocessing.target_transform,
@@ -85,11 +86,7 @@ class TrainingPipeline:
         mlflow.set_experiment(experiment_name)
 
     def _select_training_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        selected = (
-            self.config.features.numeric
-            + self.config.features.categorical
-            + [self.config.data.target_column]
-        )
+        selected = list(MODEL_FEATURES) + [self.config.data.target_column]
         missing_cols = sorted(set(selected) - set(df.columns))
         if missing_cols:
             raise ValueError(
@@ -206,7 +203,6 @@ class TrainingPipeline:
                         metadata=self._build_metadata(),
                         config_dict={
                             "data": self.config.data.model_dump(),
-                            "features": self.config.features.model_dump(),
                             "preprocessing": self.config.preprocessing.model_dump(),
                             "model": self.config.model.model_dump(),
                             "training": self.config.training.model_dump(),

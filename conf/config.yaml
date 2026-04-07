@@ -1,24 +1,10 @@
 # Training configuration for the housing price model.
-# Column names match gold.mart_property_current.
 
 data:
-  raw_data_path: "data/raw/data_master.csv"
   target_column: "price"
   test_size: 0.2
   val_size: 0.0
   random_state: 42
-
-features:
-  numeric:
-    - "bedrooms"
-    - "bathrooms"
-    - "living_area"
-    - "latitude"
-    - "longitude"
-    - "normalized_lot_area_value"
-  categorical:
-    - "property_type"
-    - "vegas_district"
 
 preprocessing:
   handle_missing: "mean"
@@ -44,6 +30,6 @@ model:
 
 training:
   experiment_name: "house_price_prediction"
-  run_name: "hgb_v2_new_features"
+  run_name: "hgb_v1_new_features"
   registry_model_name: "housing_price_predictor"
   model_output_dir: "models/production"

@@ -55,9 +55,7 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 
 load_dotenv(PROJECT_ROOT / ".env")
-DEFAULT_API_BASE_URL = os.getenv(
-    "API_BASE_URL", "https://realestatepredictor.vercel.app"
-).rstrip("/")
+DEFAULT_API_BASE_URL = os.getenv("API_BASE_URL", "").rstrip("/")
 
 
 # Page configuration
@@ -233,13 +231,13 @@ def _api_base_url_candidates() -> list[str]:
     in_docker = Path("/.dockerenv").exists()
     candidates = []
 
-    if DEFAULT_API_BASE_URL:
-        candidates.append(DEFAULT_API_BASE_URL.rstrip("/"))
-
     if in_docker:
         candidates.extend(["http://fastapi:8000", "http://localhost:8000"])
     else:
         candidates.extend(["http://localhost:8000", "http://127.0.0.1:8000"])
+
+    if DEFAULT_API_BASE_URL:
+        candidates.append(DEFAULT_API_BASE_URL.rstrip("/"))
 
     # Keep order, drop duplicates.
     deduped = []
@@ -613,11 +611,26 @@ def main():
         if resolved_url:
             st.session_state.api_base_url = resolved_url
 
+        default_sidebar_url = (
+            st.session_state.get("api_base_url")
+            or DEFAULT_API_BASE_URL
+            or "http://localhost:8000"
+        )
+        api_base_url_input = st.text_input(
+            "API Base URL",
+            value=default_sidebar_url,
+            help="Use your local FastAPI URL for development or your deployed API URL in Streamlit Cloud.",
+        ).rstrip("/")
+        if api_base_url_input:
+            st.session_state.api_base_url = api_base_url_input
+
         active_url = get_active_api_base_url()
+        health = fetch_api_health(active_url) if active_url else None
         st.caption(f"API URL: `{active_url}`")
 
         if health is None:
-            st.error("API is unreachable. Start FastAPI or fix `API_BASE_URL`.")
+            st.error("API is unreachable. Start FastAPI locally or set a working `API_BASE_URL`.")
+            st.code("uvicorn serving.api.main:app --reload --host 0.0.0.0 --port 8000")
             st.caption("Tried: " + ", ".join(f"`{url}`" for url in candidates))
             model_info = None
         elif not health.get("model_loaded", False):

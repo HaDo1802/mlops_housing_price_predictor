@@ -36,8 +36,3 @@ DROP_COLUMNS = [
     "days_on_zillow",
     "price_per_sqft",
 ]
-
-EXCLUDED_PROPERTY_TYPES = [
-    "MOBILE",
-    "MULTI_FAMILY",
-]
