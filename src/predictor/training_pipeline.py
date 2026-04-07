@@ -10,9 +10,6 @@ import mlflow
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
-from mlflow.entities import ViewType
-from mlflow.exceptions import MlflowException
-from mlflow.tracking import MlflowClient
 from sklearn.model_selection import train_test_split
 
 from predictor.config import ConfigManager, MLConfig
@@ -20,7 +17,7 @@ from predictor.data_ingest import DataIngestor
 from predictor.models import TrainerFactory
 from predictor.preprocessor import ProductionPreprocessor
 from predictor.registry import ModelRegistryManager, save_local_production_from_objects
-from predictor.schema import CATEGORICAL_FEATURES, MODEL_FEATURES, NUMERIC_FEATURES
+from predictor.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 from predictor.utils import evaluate_predictions
 
 logger = logging.getLogger(__name__)
@@ -55,45 +52,6 @@ class TrainingPipeline:
     def _log_step(step: str) -> None:
         logger.info("")
         logger.info("========== %s ==========", step)
-
-    def _ensure_active_experiment(self) -> None:
-        """Restore a soft-deleted MLflow experiment before activating it."""
-        experiment_name = self.config.training.experiment_name
-        try:
-            mlflow.set_experiment(experiment_name)
-            return
-        except MlflowException as exc:
-            if "deleted experiment" not in str(exc).lower():
-                raise
-
-        client = MlflowClient()
-        experiments = client.search_experiments(
-            view_type=ViewType.ALL,
-            filter_string=f"name = '{experiment_name}'",
-        )
-        deleted_experiment = next(
-            (exp for exp in experiments if exp.lifecycle_stage == "deleted"),
-            None,
-        )
-        if deleted_experiment is None:
-            raise
-
-        logger.warning(
-            "MLflow experiment '%s' is deleted. Restoring it automatically.",
-            experiment_name,
-        )
-        client.restore_experiment(deleted_experiment.experiment_id)
-        mlflow.set_experiment(experiment_name)
-
-    def _select_training_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        selected = list(MODEL_FEATURES) + [self.config.data.target_column]
-        missing_cols = sorted(set(selected) - set(df.columns))
-        if missing_cols:
-            raise ValueError(
-                f"Configured features not found in dataframe: {missing_cols}. "
-                f"Available: {sorted(df.columns.tolist())}"
-            )
-        return df[selected].copy()
 
     def _build_metadata(self) -> dict:
         inner_model = TrainerFactory.get_inner_model(self.model)
@@ -131,7 +89,7 @@ class TrainingPipeline:
             raise ValueError("promote=True requires track=True.")
 
         if track:
-            self._ensure_active_experiment()
+            mlflow.set_experiment(self.config.training.experiment_name)
 
         run_context = (
             mlflow.start_run(run_name=self.config.training.run_name)
@@ -145,9 +103,10 @@ class TrainingPipeline:
 
             self._log_step("CLEAN")
             df_clean = self.data_ingestor.clean(df_raw)
+            df_clean = self.data_ingestor.remove_outliers(df_clean)
 
             self._log_step("SPLIT")
-            df_selected = self._select_training_columns(df_clean)
+            df_selected = self.data_ingestor.select_training_columns(df_clean)
             X = df_selected.drop(columns=[self.config.data.target_column])
             y = df_selected[self.config.data.target_column]
             self.X_train, self.X_test, y_train, y_test = train_test_split(
@@ -160,11 +119,6 @@ class TrainingPipeline:
             self._log_step("FIT PREPROCESSOR")
             if track:
                 mlflow.sklearn.autolog(disable=True)
-            train_df = self.X_train.copy()
-            train_df[self.config.data.target_column] = y_train
-            train_df = self.data_ingestor.remove_outliers(train_df)
-            self.X_train = train_df.drop(columns=[self.config.data.target_column])
-            y_train = train_df[self.config.data.target_column]
             self.X_train_transformed = self.preprocessor.fit_transform(self.X_train)
             X_test_transformed = self.preprocessor.transform(self.X_test)
 

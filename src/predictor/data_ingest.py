@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 
 from predictor.config import MLConfig
-from predictor.schema import DROP_COLUMNS, NUMERIC_FEATURES
+from predictor.schema import DROP_COLUMNS, MODEL_FEATURES, NUMERIC_FEATURES
 
 load_dotenv()
 
@@ -63,11 +63,20 @@ class DataIngestor:
         if exclude_types and "property_type" in cleaned.columns:
             cleaned = cleaned[~cleaned["property_type"].isin(exclude_types)]
 
-        numeric_cols = [col for col in NUMERIC_FEATURES if col in cleaned.columns]
-        if numeric_cols:
-            cleaned.loc[:, numeric_cols] = cleaned[numeric_cols].astype("float64")
-
+        cleaned.loc[:, NUMERIC_FEATURES] = cleaned[NUMERIC_FEATURES].astype("float64")
+        
         return cleaned
+
+    def select_training_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Keep only model features and target, failing early if any are missing."""
+        selected = list(MODEL_FEATURES) + [self.config.data.target_column]
+        missing_cols = sorted(set(selected) - set(df.columns))
+        if missing_cols:
+            raise ValueError(
+                f"Missing training columns: {missing_cols}. "
+                f"Available: {sorted(df.columns.tolist())}"
+            )
+        return df[selected].copy()
 
     def remove_outliers(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply business-rule thresholds for price and living area."""
