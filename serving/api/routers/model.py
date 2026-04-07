@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from predictor.schema import (
     CATEGORICAL_FEATURES,
     NUMERIC_FEATURES,
+    OPTIONAL_FEATURE_DEFAULTS,
 )
 from serving.api.feature_map import CATEGORICAL_OPTIONS, FEATURE_DISPLAY_LABELS
 
@@ -69,9 +70,13 @@ async def model_info(request: Request):
 async def model_schema():
     """Canonical raw input feature contract used by API and Streamlit."""
     feature_names = list(NUMERIC_FEATURES) + list(CATEGORICAL_FEATURES)
+    optional_features = list(OPTIONAL_FEATURE_DEFAULTS)
+    required_features = [f for f in feature_names if f not in OPTIONAL_FEATURE_DEFAULTS]
     return {
         "features": {
-            "required": feature_names,
+            "required": required_features,
+            "optional": optional_features,
+            "defaults": dict(OPTIONAL_FEATURE_DEFAULTS),
             "numeric": list(NUMERIC_FEATURES),
             "categorical": list(CATEGORICAL_FEATURES),
             "display_labels": FEATURE_DISPLAY_LABELS,

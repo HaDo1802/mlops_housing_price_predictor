@@ -1,18 +1,26 @@
 """Script for MLflow model stage transitions and local production sync."""
 
 import argparse
+from datetime import datetime, timezone
 import json
+import logging
+import os
 import pickle
 import shutil
 from pathlib import Path
 
+import boto3
 import mlflow.sklearn
 import yaml
+from dotenv import load_dotenv
 from mlflow.artifacts import download_artifacts
 from mlflow.tracking import MlflowClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "models" / "production"
+logger = logging.getLogger(__name__)
+
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 def list_models(client: MlflowClient, model_name: str | None = None) -> None:
@@ -111,7 +119,41 @@ def sync_local_production_artifacts(
         with open(output_dir / "config.yaml", "w") as f:
             yaml.safe_dump({"note": "No config artifact found in MLflow run."}, f)
 
+    metadata_path = output_dir / "metadata.json"
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+    metadata.update(
+        {
+            "registry_model_name": model_name,
+            "registry_version": str(version),
+            "run_id": run_id,
+            "promotion_stage": "Production",
+            "promotion_timestamp": datetime.now(timezone.utc).isoformat(),
+            "artifact_delivery": "local_and_optional_s3_snapshot",
+        }
+    )
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
     print(f"Synced promoted artifacts to: {output_dir}")
+
+
+def sync_artifacts_to_s3(model_dir: Path, bucket: str) -> None:
+    """Upload the production artifact set to the configured S3 bucket."""
+    s3 = boto3.client(
+        "s3",
+        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+    )
+    prefix = "models/production"
+    artifact_names = ["model.pkl", "preprocessor.pkl", "metadata.json", "config.yaml"]
+
+    for artifact_name in artifact_names:
+        local_path = model_dir / artifact_name
+        if not local_path.exists():
+            raise FileNotFoundError(f"Missing artifact for S3 sync: {local_path}")
+        s3.upload_file(str(local_path), bucket, f"{prefix}/{artifact_name}")
+
+    logger.info("Synced production artifacts to s3://%s/%s", bucket, prefix)
 
 
 def parse_args() -> argparse.Namespace:
@@ -147,6 +189,12 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_OUTPUT_DIR),
         help="Local directory for synced production artifacts.",
     )
+    parser.add_argument(
+        "--bucket",
+        type=str,
+        default=None,
+        help="Optional S3 bucket override for production artifact sync.",
+    )
     return parser.parse_args()
 
 
@@ -174,6 +222,11 @@ def main() -> None:
             version=target_version,
             output_dir=Path(args.output_dir),
         )
+        bucket = args.bucket or os.getenv("ARTIFACT_BUCKET")
+        if bucket:
+            sync_artifacts_to_s3(Path(args.output_dir), bucket)
+        else:
+            logger.warning("ARTIFACT_BUCKET not set; skipping S3 artifact sync.")
 
 
 if __name__ == "__main__":

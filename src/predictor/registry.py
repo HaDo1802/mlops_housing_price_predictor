@@ -9,6 +9,7 @@ from typing import Any
 
 import mlflow
 import yaml
+from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
 logger = logging.getLogger(__name__)
@@ -50,14 +51,26 @@ class ModelRegistryManager:
         client: MlflowClient,
         metric_name: str = "test_r2",
     ) -> float | None:
-        production_versions = client.get_latest_versions(
-            self.registry_model_name,
-            stages=["Production"],
-        )
+        try:
+            versions = client.search_model_versions(
+                f"name='{self.registry_model_name}'"
+            )
+        except MlflowException as exc:
+            if "not found" in str(exc).lower():
+                return None
+            raise
+
+        production_versions = [
+            version
+            for version in versions
+            if getattr(version, "current_stage", None) == "Production"
+        ]
         if not production_versions:
             return None
 
-        prod_run_id = production_versions[0].run_id
+        production_version = max(production_versions, key=lambda version: int(version.version))
+
+        prod_run_id = production_version.run_id
         prod_run = client.get_run(prod_run_id)
         metric = prod_run.data.metrics.get(metric_name)
         return float(metric) if metric is not None else None

@@ -1,6 +1,7 @@
 """FastAPI entrypoint."""
 
 import logging
+import os
 from pathlib import Path
 import sys
 
@@ -22,6 +23,14 @@ from predictor.predict import InferencePipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _mask_bucket_name(bucket: str | None) -> str | None:
+    if not bucket:
+        return None
+    if len(bucket) <= 4:
+        return "*" * len(bucket)
+    return f"{bucket[:2]}***{bucket[-2:]}"
 
 app = FastAPI(title="Housing Price Prediction API", version="1.0.0")
 app.add_middleware(
@@ -57,8 +66,15 @@ async def startup_event():
             app.state.inference_pipeline = InferencePipeline(
                 model_name=model_name, stage=stage
             )
+            bucket = _mask_bucket_name(os.getenv("ARTIFACT_BUCKET"))
+            model_type = app.state.inference_pipeline.metadata.get("model_type")
             logger.info(
-                "Inference pipeline loaded (model=%s, stage=%s)", model_name, stage
+                "Inference pipeline loaded (model=%s, stage=%s, source=%s, bucket=%s, model_type=%s)",
+                model_name,
+                stage,
+                app.state.inference_pipeline._loaded_from,
+                bucket,
+                model_type,
             )
             return
         except Exception as exc:

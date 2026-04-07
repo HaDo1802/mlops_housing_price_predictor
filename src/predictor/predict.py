@@ -7,12 +7,15 @@ Falls back to local model files when MLflow is unavailable (e.g. Vercel, Hugging
 
 import json
 import logging
+import os
 import pickle
+import tempfile
 from pathlib import Path
 from typing import Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
+from predictor.schema import OPTIONAL_FEATURE_DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +65,13 @@ class InferencePipeline:
         self._load_artifacts()
 
     def _load_artifacts(self):
-        """Try MLflow first; fall back to local files on any failure."""
+        """Try MLflow first, then S3, then local files."""
         if self._try_load_from_mlflow():
             self._loaded_from = "mlflow"
             logger.info("Loaded model from MLflow registry.")
+        elif self._try_load_from_s3():
+            self._loaded_from = "s3"
+            logger.info("Loaded model from S3 production artifacts.")
         else:
             self._load_from_local()
             self._loaded_from = "local"
@@ -113,6 +119,49 @@ class InferencePipeline:
             return True
         except Exception as exc:
             logger.warning("MLflow load failed (%s). Falling back to local files.", exc)
+            return False
+
+    def _try_load_from_s3(self) -> bool:
+        """Attempt to load production artifacts from S3."""
+        bucket = os.getenv("ARTIFACT_BUCKET")
+        if not bucket:
+            return False
+
+        try:
+            import boto3
+
+            s3 = boto3.client(
+                "s3",
+                region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+            )
+            prefix = "models/production"
+            s3_base = f"s3://{bucket}/{prefix}"
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                artifact_map = {
+                    "model.pkl": tmp_path / "model.pkl",
+                    "preprocessor.pkl": tmp_path / "preprocessor.pkl",
+                    "metadata.json": tmp_path / "metadata.json",
+                    "config.yaml": tmp_path / "config.yaml",
+                }
+
+                for artifact_name, local_path in artifact_map.items():
+                    s3.download_file(bucket, f"{prefix}/{artifact_name}", str(local_path))
+
+                self.model = _load_pickle_with_compat(artifact_map["model.pkl"])
+                self.preprocessor = _load_pickle_with_compat(
+                    artifact_map["preprocessor.pkl"]
+                )
+                with open(artifact_map["metadata.json"], "r") as f:
+                    self.metadata = json.load(f)
+
+            self.model_version_info = _LocalVersionStub(Path(s3_base))
+            self._loaded_from = "s3"
+            logger.info("Loaded production artifacts from %s", s3_base)
+            return True
+        except Exception as exc:
+            logger.warning("S3 load failed (%s). Falling back to local files.", exc)
             return False
 
     def _download_run_artifact(self, artifact_name: str):
@@ -168,6 +217,7 @@ class InferencePipeline:
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Make predictions on new data."""
+        X = self._prepare_input(X)
         self._validate_input(X)
         X_transformed = self.preprocessor.transform(X)
         predictions = self.model.predict(X_transformed)
@@ -182,7 +232,7 @@ class InferencePipeline:
     def predict_with_uncertainty(self, X: pd.DataFrame) -> tuple:
         """Return (predictions, lower_bounds, upper_bounds) using estimator ensemble."""
         preds = self.predict(X)
-        X_t = self.preprocessor.transform(X)
+        X_t = self.preprocessor.transform(self._prepare_input(X))
 
         interval_cfg = self.metadata.get("prediction_interval") or {}
         if interval_cfg.get("method") == "segmented_relative_error_quantile":
@@ -256,6 +306,16 @@ class InferencePipeline:
             raise ValueError(
                 f"Missing required features: {missing}\nExpected: {expected}"
             )
+
+    def _prepare_input(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Fill optional inference features with stable defaults when omitted."""
+        X_prepared = X.copy()
+        for feature_name, default_value in OPTIONAL_FEATURE_DEFAULTS.items():
+            if feature_name not in X_prepared.columns:
+                X_prepared[feature_name] = default_value
+            else:
+                X_prepared[feature_name] = X_prepared[feature_name].fillna(default_value)
+        return X_prepared
 
     def get_feature_importance(self, top_n: int = 10) -> pd.DataFrame:
         """Return a DataFrame of feature importances (model must support it)."""

@@ -61,7 +61,10 @@ async def predict(features: HouseFeatures, request: Request):
             ),
         )
     df = pd.DataFrame([row])
-    preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(df)
+    try:
+        preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(df)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     pred = float(preds[0])
     return PredictionResponse(
         prediction=pred,
@@ -83,7 +86,10 @@ async def predict_batch(request_body: BatchPredictionRequest, request: Request):
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     df = pd.DataFrame([_features_to_row(row) for row in request_body.features])
-    preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(df)
+    try:
+        preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(df)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     top_features = _get_top_features(pipeline, df.iloc[[0]])
 
     rows = []
@@ -120,8 +126,10 @@ async def predict_file(request: Request, file: UploadFile = File(...)):
     else:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    pipeline._validate_input(df)
-    preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(df)
+    try:
+        preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(df)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     out = df.copy()
     out["prediction"] = preds

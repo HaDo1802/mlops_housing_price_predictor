@@ -9,21 +9,23 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from predictor.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+
 
 class ProductionPreprocessor:
     """Fit and apply numeric/categorical feature transforms."""
 
     def __init__(
         self,
-        numeric_features: list[str],
-        categorical_features: list[str],
+        numeric_features: list[str] | None = None,
+        categorical_features: list[str] | None = None,
         scaling_method: str = "standard",
         encoding_method: str = "onehot",
         target_transform: str = "log1p",
         verbose: bool = True,
     ):
-        self.numeric_features = list(numeric_features)
-        self.categorical_features = list(categorical_features)
+        self.numeric_features = list(numeric_features or NUMERIC_FEATURES)
+        self.categorical_features = list(categorical_features or CATEGORICAL_FEATURES)
         self.scaling_method = scaling_method
         self.encoding_method = encoding_method
         self.target_transform = target_transform
@@ -64,6 +66,9 @@ class ProductionPreprocessor:
         )
 
     def fit_transform(self, X: pd.DataFrame):
+        missing = set(self.numeric_features + self.categorical_features) - set(X.columns)
+        if missing:
+            raise ValueError(f"Missing required features: {sorted(missing)}")
         X_out = self.pipeline.fit_transform(X)
         self.is_fitted = True
         return X_out
@@ -71,6 +76,9 @@ class ProductionPreprocessor:
     def transform(self, X: pd.DataFrame):
         if not self.is_fitted:
             raise RuntimeError("Preprocessor must be fitted before calling transform.")
+        missing = set(self.numeric_features + self.categorical_features) - set(X.columns)
+        if missing:
+            raise ValueError(f"Missing required features: {sorted(missing)}")
         return self.pipeline.transform(X)
 
     def get_feature_names(self) -> list[str]:

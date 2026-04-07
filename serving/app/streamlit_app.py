@@ -40,6 +40,7 @@ for p in (PROJECT_ROOT, SRC_ROOT):
 from predictor.schema import (
     CATEGORICAL_FEATURES,
     NUMERIC_FEATURES,
+    OPTIONAL_FEATURE_DEFAULTS,
 )
 from serving.api.feature_map import (
     CATEGORICAL_OPTIONS,
@@ -184,18 +185,20 @@ def fetch_model_schema(base_url: str):
 
 def resolve_feature_spec(
     schema_contract: Optional[dict],
-) -> tuple[list[str], list[str], dict[str, str], dict[str, list[str]]]:
+) -> tuple[list[str], list[str], dict[str, str], dict[str, list[str]], list[str]]:
     """Resolve feature contract from API schema endpoint with local fallback."""
     numeric_features = list(NUMERIC_FEATURES)
     categorical_features = list(CATEGORICAL_FEATURES)
     display_labels = dict(FEATURE_DISPLAY_LABELS)
     categorical_options = dict(CATEGORICAL_OPTIONS)
+    optional_features = list(OPTIONAL_FEATURE_DEFAULTS)
 
     if schema_contract:
         numeric_features = schema_contract.get("numeric") or numeric_features
         categorical_features = (
             schema_contract.get("categorical") or categorical_features
         )
+        optional_features = schema_contract.get("optional") or optional_features
         display_labels.update(schema_contract.get("display_labels") or {})
 
         remote_options = schema_contract.get("categorical_options") or {}
@@ -203,7 +206,13 @@ def resolve_feature_spec(
             if isinstance(values, list) and values:
                 categorical_options[key] = values
 
-    return numeric_features, categorical_features, display_labels, categorical_options
+    return (
+        numeric_features,
+        categorical_features,
+        display_labels,
+        categorical_options,
+        optional_features,
+    )
 
 
 @st.cache_data(ttl=30)
@@ -269,7 +278,6 @@ def build_api_payload(inputs: dict) -> dict:
         centroid = VEGAS_DISTRICT_CENTROIDS[payload["vegas_district"]]
         payload.setdefault("latitude", float(centroid["latitude"]))
         payload.setdefault("longitude", float(centroid["longitude"]))
-    payload.pop("vegas_district", None)
     return payload
 
 
@@ -580,21 +588,21 @@ def main():
         - Property Type
         
         **Instructions:**
-        1. Fill in all required property details
+        1. Fill in the required property details
         2. Click "Predict Price" button
         3. Review prediction with confidence interval
         4. Check which features influenced the prediction most
         """
         )
 
-        st.markdown("**Input Requirements (Required):**")
+        st.markdown("**Input Requirements:**")
         st.markdown(
             f"""
         - `bedrooms`: {NUMERIC_INPUT_CONFIG['bedrooms']['min_value']} to {NUMERIC_INPUT_CONFIG['bedrooms']['max_value']}
         - `bathrooms`: {NUMERIC_INPUT_CONFIG['bathrooms']['min_value']} to {NUMERIC_INPUT_CONFIG['bathrooms']['max_value']}
         - `livingarea`: {NUMERIC_INPUT_CONFIG['livingarea']['min_value']} to {NUMERIC_INPUT_CONFIG['livingarea']['max_value']} sqft
-        - `latitude`: {NUMERIC_INPUT_CONFIG['latitude']['min_value']} to {NUMERIC_INPUT_CONFIG['latitude']['max_value']}
-        - `longitude`: {NUMERIC_INPUT_CONFIG['longitude']['min_value']} to {NUMERIC_INPUT_CONFIG['longitude']['max_value']}
+        - `latitude` / `longitude`: optional if `vegas_district` is provided
+        - `normalized_lot_area_value`: optional, defaults to {OPTIONAL_FEATURE_DEFAULTS['normalized_lot_area_value']:.0f} sqft when omitted
         - `propertytype`: select one of the provided categories
         """
         )
@@ -642,7 +650,8 @@ def main():
         st.markdown("**Need Help?**")
         st.markdown(
             """
-        - All fields are required
+        - Bedrooms, bathrooms, living area, property type, and location are required
+        - `normalized_lot_area_value` is optional and falls back to a default lot size
         - Numerical values must be within the allowed ranges shown in the form
         - Latitude/longitude should be in the target market bounds
         - Use exact categorical values shown in dropdowns
@@ -651,15 +660,20 @@ def main():
 
     # Main content
     schema_contract = fetch_model_schema(active_url) if active_url else None
-    numeric_features, categorical_features, display_labels, categorical_options = (
-        resolve_feature_spec(schema_contract)
-    )
-    inputs, required_features = create_input_form(
+    (
+        numeric_features,
+        categorical_features,
+        display_labels,
+        categorical_options,
+        optional_features,
+    ) = resolve_feature_spec(schema_contract)
+    inputs, all_features = create_input_form(
         numeric_features,
         categorical_features,
         display_labels,
         categorical_options,
     )
+    required_features = [f for f in all_features if f not in set(optional_features)]
 
     st.markdown("---")
     st.markdown("## 📂 Batch Predictions (CSV/Excel)")

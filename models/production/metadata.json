@@ -1,0 +1,75 @@
+{
+  "model_type": "HistGradientBoostingRegressor",
+  "model_key": "hist_gradient_boosting",
+  "target_transform": "log1p",
+  "hyperparameters": {
+    "learning_rate": 0.03,
+    "max_iter": 1200,
+    "min_samples_leaf": 8
+  },
+  "test_metrics": {
+    "r2": 0.7451443805101494,
+    "rmse": 379232.7012936545,
+    "mae": 118132.64037917032,
+    "mse": 143817441730.48218,
+    "cheap_segment_mae": 30461.835331933322,
+    "cheap_segment_cutoff_p25": 379673.5
+  },
+  "val_metrics": null,
+  "feature_names": [
+    "bedrooms",
+    "bathrooms",
+    "living_area",
+    "latitude",
+    "longitude",
+    "normalized_lot_area_value",
+    "property_type_CONDO",
+    "property_type_MULTI_FAMILY",
+    "property_type_SINGLE_FAMILY",
+    "property_type_TOWNHOUSE",
+    "vegas_district_Anthem",
+    "vegas_district_Centennial",
+    "vegas_district_Downtown Las Vegas",
+    "vegas_district_Enterprise",
+    "vegas_district_Green Valley",
+    "vegas_district_Mountains Edge",
+    "vegas_district_North Las Vegas",
+    "vegas_district_Paradise",
+    "vegas_district_Spring Valley",
+    "vegas_district_Summerlin",
+    "vegas_district_The Strip",
+    "vegas_district_Winchester"
+  ],
+  "prediction_interval": {
+    "method": "segmented_relative_error_quantile",
+    "alpha": 0.05,
+    "coverage": 0.95,
+    "num_segments": 5,
+    "segment_edges": [
+      363782.0251820276,
+      447192.9960843661,
+      537228.7599376198,
+      742268.5101115665
+    ],
+    "relative_error_quantiles_by_segment": [
+      0.2561943921821176,
+      0.2644386610737961,
+      0.2099217633188408,
+      0.2765689081924507,
+      0.47987291831213036
+    ],
+    "relative_error_quantiles": {
+      "global": 0.3553920018041788
+    },
+    "calibration_size": 476
+  },
+  "train_size": 1861,
+  "val_size": 0,
+  "test_size": 476,
+  "registry_model_name": "housing_price_predictor",
+  "registry_version": "1",
+  "run_id": "2b12e97de3a9445cb6587e2fcaa5ff5a",
+  "promotion_stage": "Production",
+  "promotion_timestamp": "2026-04-07T17:04:58.242646+00:00",
+  "artifact_delivery": "local_and_optional_s3_snapshot"
+}
