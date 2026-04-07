@@ -16,7 +16,6 @@ from predictor.config import ConfigManager, MLConfig
 from predictor.data_ingest import DataIngestor
 from predictor.models import TrainerFactory
 from predictor.preprocessor import ProductionPreprocessor
-from predictor.registry import ModelRegistryManager, save_local_production_from_objects
 from predictor.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 from predictor.utils import evaluate_predictions
 
@@ -39,9 +38,6 @@ class TrainingPipeline:
             encoding_method=self.config.preprocessing.encoding_method,
             target_transform=self.config.preprocessing.target_transform,
             verbose=True,
-        )
-        self.registry = ModelRegistryManager(
-            registry_model_name=self.config.training.registry_model_name
         )
 
         self.model = None
@@ -142,27 +138,6 @@ class TrainingPipeline:
                         json.dump(self._build_metadata(), f, indent=2)
                     mlflow.log_artifacts(str(tmp_path))
 
-            should_promote = False
-            if track and promote:
-                self._log_step("GATE & REGISTER")
-                run_id = mlflow.active_run().info.run_id
-                should_promote = self.registry.evaluate_and_promote(
-                    run_id=run_id,
-                    current_metric=self.metrics["test"]["r2"],
-                )
-                if should_promote:
-                    save_local_production_from_objects(
-                        model=self.model,
-                        preprocessor=self.preprocessor,
-                        metadata=self._build_metadata(),
-                        config_dict={
-                            "data": self.config.data.model_dump(),
-                            "preprocessing": self.config.preprocessing.model_dump(),
-                            "model": self.config.model.model_dump(),
-                            "training": self.config.training.model_dump(),
-                        },
-                    )
-
             self._log_step("DONE")
-            self.metrics["promote_to_production"] = bool(should_promote)
+            self.metrics["promote_to_production"] = False
             return self.metrics

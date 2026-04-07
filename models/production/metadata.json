@@ -70,6 +70,6 @@
   "registry_version": "1",
   "run_id": "2b12e97de3a9445cb6587e2fcaa5ff5a",
   "promotion_stage": "Production",
-  "promotion_timestamp": "2026-04-07T17:04:58.242646+00:00",
-  "artifact_delivery": "local_and_optional_s3_snapshot"
+  "promotion_timestamp": "2026-04-07T21:21:56Z",
+  "artifact_delivery": "local_production_snapshot"
 }

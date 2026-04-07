@@ -313,7 +313,7 @@ python scripts/train.py
 
 ```bash
 python scripts/promote.py --model-name housing_price_predictor --version 1 --stage Production
-python scripts/upload_production_to_s3.py
+python scripts/sync_production_artifacts.py
 ```
 
 - Drift check utility:
