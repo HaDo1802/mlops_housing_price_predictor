@@ -8,7 +8,7 @@ SRC := src serving scripts conf
 QUALITY_TARGETS := src data tests serving scripts dags
 TEST_DIR := tests
 
-.PHONY: help install lint format test clean all vercel-preview vercel-prod api
+.PHONY: help install lint format test clean all api ui
 
 help:
 	@printf "Targets:\\n"
@@ -18,8 +18,6 @@ help:
 	@printf "  test     Run pytest if a test dir exists\\n"
 	@printf "  api      Run FastAPI locally\\n"
 	@printf "  ui       Run Streamlit locally\\n"
-	@printf "  vercel-preview Deploy FastAPI to Vercel preview\\n"
-	@printf "  vercel-prod    Deploy FastAPI to Vercel production\\n"
 	
 install:
 	$(PIP) install --upgrade pip
@@ -43,9 +41,3 @@ ui:
 
 
 all: install format lint test
-
-vercel-preview:
-	vercel --yes
-
-vercel-prod:
-	vercel --prod --yes

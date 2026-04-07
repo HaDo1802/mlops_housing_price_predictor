@@ -19,14 +19,12 @@ import logging
 import os
 import sys
 import uuid
+import io
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 
 # Add project root to path
@@ -42,7 +40,9 @@ from predictor.schema import (
     NUMERIC_FEATURES,
     OPTIONAL_FEATURE_DEFAULTS,
 )
+from predictor.predict import InferencePipeline
 from serving.api.feature_map import (
+    API_TO_MODEL_FIELDS,
     CATEGORICAL_OPTIONS,
     FEATURE_DISPLAY_LABELS,
     VEGAS_DISTRICT_CENTROIDS,
@@ -55,7 +55,6 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 
 load_dotenv(PROJECT_ROOT / ".env")
-DEFAULT_API_BASE_URL = os.getenv("API_BASE_URL", "").rstrip("/")
 
 
 # Page configuration
@@ -148,170 +147,122 @@ NUMERIC_INPUT_CONFIG = {
 }
 
 
-@st.cache_data(ttl=60)
-def fetch_model_info(base_url: str):
-    """Fetch model metadata from the FastAPI service"""
-    url = f"{base_url.rstrip('/')}/model/info"
+@st.cache_resource
+def load_inference_pipeline():
+    """Load the production inference pipeline once per Streamlit process."""
+    return InferencePipeline(model_name="housing_price_predictor", stage="Production")
+
+
+def get_model_info() -> dict | None:
+    """Return model metadata from the loaded inference pipeline."""
     try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            return response.json()
-        logger.warning(
-            "Model info request failed: %s - %s", response.status_code, response.text
-        )
-    except requests.RequestException as exc:
-        logger.warning("Model info request error: %s", exc)
-    return None
+        return load_inference_pipeline().get_model_info()
+    except Exception as exc:
+        logger.error("Model load failed: %s", exc)
+        return None
 
 
-@st.cache_data(ttl=60)
-def fetch_model_schema(base_url: str):
-    """Fetch canonical input feature contract from the API."""
-    url = f"{base_url.rstrip('/')}/model/schema"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            payload = response.json()
-            return payload.get("features", payload)
-        logger.warning(
-            "Model schema request failed: %s - %s", response.status_code, response.text
-        )
-    except requests.RequestException as exc:
-        logger.warning("Model schema request error: %s", exc)
-    return None
-
-
-def resolve_feature_spec(
-    schema_contract: Optional[dict],
-) -> tuple[list[str], list[str], dict[str, str], dict[str, list[str]], list[str]]:
-    """Resolve feature contract from API schema endpoint with local fallback."""
-    numeric_features = list(NUMERIC_FEATURES)
-    categorical_features = list(CATEGORICAL_FEATURES)
-    display_labels = dict(FEATURE_DISPLAY_LABELS)
-    categorical_options = dict(CATEGORICAL_OPTIONS)
-    optional_features = list(OPTIONAL_FEATURE_DEFAULTS)
-
-    if schema_contract:
-        numeric_features = schema_contract.get("numeric") or numeric_features
-        categorical_features = (
-            schema_contract.get("categorical") or categorical_features
-        )
-        optional_features = schema_contract.get("optional") or optional_features
-        display_labels.update(schema_contract.get("display_labels") or {})
-
-        remote_options = schema_contract.get("categorical_options") or {}
-        for key, values in remote_options.items():
-            if isinstance(values, list) and values:
-                categorical_options[key] = values
-
+def resolve_feature_spec() -> tuple[list[str], list[str], dict[str, str], dict[str, list[str]], list[str]]:
+    """Return the local raw feature contract used by the model and UI."""
     return (
-        numeric_features,
-        categorical_features,
-        display_labels,
-        categorical_options,
-        optional_features,
+        list(NUMERIC_FEATURES),
+        list(CATEGORICAL_FEATURES),
+        dict(FEATURE_DISPLAY_LABELS),
+        dict(CATEGORICAL_OPTIONS),
+        list(OPTIONAL_FEATURE_DEFAULTS),
     )
 
 
-@st.cache_data(ttl=30)
-def fetch_api_health(base_url: str):
-    """Fetch API health status for clearer diagnostics."""
-    url = f"{base_url.rstrip('/')}/health"
-    try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            return response.json()
-    except requests.RequestException:
-        return None
-    return None
+def _fill_missing_location_from_district(df: pd.DataFrame) -> pd.DataFrame:
+    """Backfill latitude/longitude from vegas_district centroids when needed."""
+    df = df.copy()
+    if "vegas_district" not in df.columns:
+        return df
 
+    if "latitude" not in df.columns:
+        df["latitude"] = np.nan
+    if "longitude" not in df.columns:
+        df["longitude"] = np.nan
 
-def _api_base_url_candidates() -> list[str]:
-    """Return candidate API base URLs ordered by runtime likelihood."""
-    in_docker = Path("/.dockerenv").exists()
-    candidates = []
-
-    if in_docker:
-        candidates.extend(["http://fastapi:8000", "http://localhost:8000"])
-    else:
-        candidates.extend(["http://localhost:8000", "http://127.0.0.1:8000"])
-
-    if DEFAULT_API_BASE_URL:
-        candidates.append(DEFAULT_API_BASE_URL.rstrip("/"))
-
-    # Keep order, drop duplicates.
-    deduped = []
-    seen = set()
-    for url in candidates:
-        if url not in seen:
-            deduped.append(url)
-            seen.add(url)
-    return deduped
-
-
-@st.cache_data(ttl=30)
-def resolve_api_base_url():
-    """Find the first reachable API endpoint."""
-    candidates = _api_base_url_candidates()
-    for candidate in candidates:
-        health = fetch_api_health(candidate)
-        if health is not None:
-            return candidate, candidates, health
-    return None, candidates, None
-
-
-def get_active_api_base_url() -> str:
-    """Get currently selected API URL from session state."""
-    return st.session_state.get("api_base_url") or DEFAULT_API_BASE_URL
-
-
-def build_api_payload(inputs: dict) -> dict:
-    """Return payload expected by current API schema keys."""
-    payload = {k: v for k, v in inputs.items() if v is not None}
-    if (
-        ("latitude" not in payload or "longitude" not in payload)
-        and "vegas_district" in payload
-        and payload["vegas_district"] in VEGAS_DISTRICT_CENTROIDS
-    ):
-        centroid = VEGAS_DISTRICT_CENTROIDS[payload["vegas_district"]]
-        payload.setdefault("latitude", float(centroid["latitude"]))
-        payload.setdefault("longitude", float(centroid["longitude"]))
-    return payload
-
-
-def request_prediction(payload: dict) -> dict:
-    """Call FastAPI prediction endpoint"""
-    url = f"{get_active_api_base_url().rstrip('/')}/predict"
-    try:
-        response = requests.post(url, json=payload, timeout=20)
-        if response.status_code == 200:
-            return response.json()
-        logger.error(
-            "Prediction request failed: %s - %s", response.status_code, response.text
+    for district, centroid in VEGAS_DISTRICT_CENTROIDS.items():
+        mask = (
+            df["vegas_district"].eq(district)
+            & (df["latitude"].isna() | df["longitude"].isna())
         )
-        raise RuntimeError(response.text)
-    except requests.RequestException as exc:
-        logger.error("Prediction request error: %s", exc)
-        raise RuntimeError("Prediction service is unavailable") from exc
+        if mask.any():
+            df.loc[mask, "latitude"] = df.loc[mask, "latitude"].fillna(
+                float(centroid["latitude"])
+            )
+            df.loc[mask, "longitude"] = df.loc[mask, "longitude"].fillna(
+                float(centroid["longitude"])
+            )
+    return df
+
+
+def build_model_row(inputs: dict) -> dict:
+    """Convert UI inputs into the raw model feature row."""
+    row = {k: v for k, v in inputs.items() if v is not None}
+    if (
+        ("latitude" not in row or "longitude" not in row)
+        and "vegas_district" in row
+        and row["vegas_district"] in VEGAS_DISTRICT_CENTROIDS
+    ):
+        centroid = VEGAS_DISTRICT_CENTROIDS[row["vegas_district"]]
+        row.setdefault("latitude", float(centroid["latitude"]))
+        row.setdefault("longitude", float(centroid["longitude"]))
+    return row
+
+
+def _normalize_input_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize file-upload columns into the raw model feature contract."""
+    rename_map = {
+        column: API_TO_MODEL_FIELDS[column]
+        for column in df.columns
+        if column in API_TO_MODEL_FIELDS
+    }
+    normalized = df.rename(columns=rename_map).copy()
+    normalized = _fill_missing_location_from_district(normalized)
+    return normalized
+
+
+def request_prediction(row: dict) -> dict:
+    """Run a single prediction directly through the local inference pipeline."""
+    pipeline = load_inference_pipeline()
+    df = pd.DataFrame([row])
+    preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(df)
+    pred = float(preds[0])
+    try:
+        top_features = pipeline.get_feature_importance(top_n=5).to_dict("records")
+    except Exception:
+        top_features = None
+    return {
+        "prediction": pred,
+        "confidence_interval": {
+            "lower": float(pred + lower_bounds[0]),
+            "upper": float(pred + upper_bounds[0]),
+        },
+        "top_features": top_features,
+    }
 
 
 def request_file_prediction(file_name: str, file_bytes: bytes, mime_type: str) -> bytes:
-    """Call FastAPI file prediction endpoint and return CSV bytes"""
-    url = f"{get_active_api_base_url().rstrip('/')}/predict/file"
-    files = {"file": (file_name, file_bytes, mime_type or "application/octet-stream")}
-    try:
-        response = requests.post(url, files=files, timeout=60)
-        if response.status_code == 200:
-            return response.content
-        logger.error(
-            "File prediction request failed: %s - %s",
-            response.status_code,
-            response.text,
-        )
-        raise RuntimeError(response.text)
-    except requests.RequestException as exc:
-        logger.error("File prediction request error: %s", exc)
-        raise RuntimeError("Prediction service is unavailable") from exc
+    """Run local batch prediction and return CSV bytes."""
+    if file_name.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    elif file_name.lower().endswith((".xlsx", ".xls")):
+        df = pd.read_excel(io.BytesIO(file_bytes))
+    else:
+        raise RuntimeError("Unsupported file type")
+
+    pipeline = load_inference_pipeline()
+    normalized = _normalize_input_dataframe(df)
+    preds, lower_bounds, upper_bounds = pipeline.predict_with_uncertainty(normalized)
+
+    out = df.copy()
+    out["prediction"] = preds
+    out["lower_bound"] = preds + lower_bounds
+    out["upper_bound"] = preds + upper_bounds
+    return out.to_csv(index=False).encode("utf-8")
 
 
 def validate_inputs(inputs: dict, required_features: list) -> tuple:
@@ -578,7 +529,7 @@ def main():
         st.markdown(
             """
         This application predicts property prices using the deployed
-        **Housing Predictor** model and a strict API feature contract.
+        **Housing Predictor** model loaded directly from the production artifact snapshot.
         
         **Core input features:**
         - Bedrooms, Bathrooms, Living Area
@@ -607,56 +558,20 @@ def main():
 
         st.markdown("---")
         st.markdown("**Model Info:**")
-        resolved_url, candidates, health = resolve_api_base_url()
-        if resolved_url:
-            st.session_state.api_base_url = resolved_url
-
-        default_sidebar_url = (
-            st.session_state.get("api_base_url")
-            or DEFAULT_API_BASE_URL
-            or "http://localhost:8000"
-        )
-        api_base_url_input = st.text_input(
-            "API Base URL",
-            value=default_sidebar_url,
-            help="Use your local FastAPI URL for development or your deployed API URL in Streamlit Cloud.",
-        ).rstrip("/")
-        if api_base_url_input:
-            st.session_state.api_base_url = api_base_url_input
-
-        active_url = get_active_api_base_url()
-        health = fetch_api_health(active_url) if active_url else None
-        st.caption(f"API URL: `{active_url}`")
-
-        if health is None:
-            st.error("API is unreachable. Start FastAPI locally or set a working `API_BASE_URL`.")
-            st.code("uvicorn serving.api.main:app --reload --host 0.0.0.0 --port 8000")
-            st.caption("Tried: " + ", ".join(f"`{url}`" for url in candidates))
-            model_info = None
-        elif not health.get("model_loaded", False):
-            st.warning("API is running, but model is not loaded on startup.")
-            load_error = health.get("load_error")
-            if load_error:
-                st.caption(f"Load error: {load_error}")
-                if "invalid load key, 'v'" in str(load_error):
-                    st.error(
-                        "Model artifact looks like a Git LFS pointer file, not a real pickle. "
-                        "Redeploy API with actual model binaries available at runtime."
-                    )
-            model_info = None
-        else:
-            model_info = fetch_model_info(active_url)
+        model_info = get_model_info()
         if model_info:
-            st.info(f"Model: {model_info.get('model_type', 'unknown')}")
-            features = model_info.get("features", {}).get("count")
-            if features is not None:
-                st.info(f"Features: {features}")
-            interval_cfg = model_info.get("prediction_interval") or {}
+            metadata = model_info.get("metadata", {})
+            st.info(f"Model: {metadata.get('model_type', 'unknown')}")
+            st.info(f"Loaded from: {model_info.get('loaded_from', 'unknown')}")
+            bucket = os.getenv("ARTIFACT_BUCKET")
+            if bucket:
+                st.caption(f"S3 bucket: `{bucket}`")
+            interval_cfg = metadata.get("prediction_interval") or {}
             st.session_state.confidence_level = float(
                 interval_cfg.get("coverage", 0.95) * 100
             )
         else:
-            st.warning("Model info unavailable. Using local fallback feature schema.")
+            st.error("Model could not be loaded. Check S3 credentials or local production artifacts.")
             st.session_state.confidence_level = 95.0
 
         st.markdown("---")
@@ -672,14 +587,13 @@ def main():
         )
 
     # Main content
-    schema_contract = fetch_model_schema(active_url) if active_url else None
     (
         numeric_features,
         categorical_features,
         display_labels,
         categorical_options,
         optional_features,
-    ) = resolve_feature_spec(schema_contract)
+    ) = resolve_feature_spec()
     inputs, all_features = create_input_form(
         numeric_features,
         categorical_features,
@@ -773,8 +687,8 @@ def main():
             # Make prediction
             with st.spinner("🔄 Calculating prediction..."):
                 try:
-                    payload = build_api_payload(inputs)
-                    response = request_prediction(payload)
+                    row = build_model_row(inputs)
+                    response = request_prediction(row)
 
                     prediction = response["prediction"]
                     lower = response["confidence_interval"]["lower"]

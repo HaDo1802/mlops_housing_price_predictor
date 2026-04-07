@@ -7,8 +7,7 @@
 
 The system is currently under infrastructure refactoring.
 - Streamlit UI: deploy from `serving/app/streamlit_app.py`
-- **Deployed API:** [https://realestatepredictor-81yl5mgxf-hado1802s-projects.vercel.app/](https://realestatepredictor-81yl5mgxf-hado1802s-projects.vercel.app/)  
-  *(Note: Please allow 10–15 seconds for the server to start up)*
+- FastAPI remains in the repo for future deployment, but the current recommended demo path is Streamlit Cloud + S3-backed model artifacts
 
 Transforming the classic **beginner house price prediction** problem into a **production-grade machine learning project** that implements practical MLOps patterns across the entire lifecycle:
 - config-oriented management using config.ymal 
@@ -53,7 +52,7 @@ Core goals:
 - Track runs, metrics, and lineage with MLflow.
 - Promote models using explicit quality gates instead of manual intuition.
 - Serve predictions through a stable API and web UI.
-- Keep deployment paths flexible for local, containerized, and serverless runtime.
+- Keep deployment paths flexible for local and containerized runtime.
 - Add monitoring hooks for post-deployment feedback and drift detection.
 
 ## Why This Architecture
@@ -62,7 +61,7 @@ The codebase is intentionally separated by responsibility:
 
 - `src/predictor/`: core ML package logic (reusable + testable).
 - `scripts/`: operational entrypoints for jobs (train, promote, sync artifacts).
-- `serving/`: online inference layer (FastAPI + Streamlit + Vercel entrypoint).
+- `serving/`: online inference layer (FastAPI + Streamlit).
 - `conf/`: single-file configuration in `conf/config.yaml`.
 - `tests/`: unit + integration tests to protect behavior.
 
@@ -241,14 +240,13 @@ Raw data
 
 ```text
 .
-├── api/                         # Vercel-compatible entrypoint
 ├── conf/                        # Single YAML configuration
 ├── data/                        # Raw, processed, sample, and feedback datasets
 ├── docker/                      # Dockerfiles + compose setup
 ├── image/                       # Cover image and media assets
 ├── notebooks/                   # Exploration and experimentation notebooks
 ├── scripts/                     # CLI/job scripts (train, promote, sync artifacts)
-├── serving/                     # FastAPI service + Streamlit app + Vercel app
+├── serving/                     # FastAPI service + Streamlit app
 ├── src/predictor/               # Core ML package
 ├── tests/                       # Unit + integration tests
 ├── Makefile

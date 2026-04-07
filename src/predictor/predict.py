@@ -1,9 +1,4 @@
-"""
-Production Inference Pipeline
-
-Tries to load from MLflow Model Registry first.
-Falls back to local model files when MLflow is unavailable (e.g. Vercel, HuggingFace).
-"""
+"""Production inference pipeline."""
 
 import json
 import logging
@@ -48,6 +43,7 @@ class InferencePipeline:
         self.model_name = model_name
         self.stage = stage
         self.version = str(version) if version is not None else None
+        self._use_local_artifacts = local_model_dir is not None
         if local_model_dir:
             self.local_model_dir = Path(local_model_dir)
         else:
@@ -65,67 +61,21 @@ class InferencePipeline:
         self._load_artifacts()
 
     def _load_artifacts(self):
-        """Try MLflow first, then S3, then local files."""
-        if self._try_load_from_mlflow():
-            self._loaded_from = "mlflow"
-            logger.info("Loaded model from MLflow registry.")
-        elif self._try_load_from_s3():
-            self._loaded_from = "s3"
-            logger.info("Loaded model from S3 production artifacts.")
-        else:
+        """Load explicit local artifacts for tests, otherwise load production from S3."""
+        if self._use_local_artifacts:
             self._load_from_local()
             self._loaded_from = "local"
             logger.info("Loaded model from local files: %s", self.local_model_dir)
+            return
+        self._load_from_s3()
 
-    def _try_load_from_mlflow(self) -> bool:
-        """Attempt to load model from MLflow Model Registry."""
-        try:
-            import mlflow
-            import mlflow.sklearn
-            from mlflow.tracking import MlflowClient
-
-            self.client = MlflowClient()
-
-            if self.version is not None:
-                self.model_version_info = self.client.get_model_version(
-                    self.model_name, self.version
-                )
-            else:
-                versions = self.client.search_model_versions(f"name='{self.model_name}'")
-                stage_versions = [
-                    mv
-                    for mv in versions
-                    if getattr(mv, "current_stage", None) == self.stage
-                ]
-                if not stage_versions:
-                    logger.warning(
-                        "No MLflow model found for '%s' at stage '%s'.",
-                        self.model_name,
-                        self.stage,
-                    )
-                    return False
-                self.model_version_info = sorted(
-                    stage_versions, key=lambda mv: int(mv.version), reverse=True
-                )[0]
-
-            model_uri = (
-                f"models:/{self.model_name}/{self.version}"
-                if self.version
-                else f"models:/{self.model_name}/{self.stage}"
-            )
-            self.model = mlflow.sklearn.load_model(model_uri)
-            self.preprocessor = self._download_run_artifact("preprocessor.pkl")
-            self.metadata = self._download_run_metadata()
-            return True
-        except Exception as exc:
-            logger.warning("MLflow load failed (%s). Falling back to local files.", exc)
-            return False
-
-    def _try_load_from_s3(self) -> bool:
-        """Attempt to load production artifacts from S3."""
+    def _load_from_s3(self) -> None:
+        """Load production artifacts from S3."""
         bucket = os.getenv("ARTIFACT_BUCKET")
         if not bucket:
-            return False
+            raise RuntimeError(
+                "ARTIFACT_BUCKET is not set. Production inference now loads from S3 only."
+            )
 
         try:
             import boto3
@@ -159,29 +109,8 @@ class InferencePipeline:
             self.model_version_info = _LocalVersionStub(Path(s3_base))
             self._loaded_from = "s3"
             logger.info("Loaded production artifacts from %s", s3_base)
-            return True
         except Exception as exc:
-            logger.warning("S3 load failed (%s). Falling back to local files.", exc)
-            return False
-
-    def _download_run_artifact(self, artifact_name: str):
-        """Download and deserialise a pickle artifact from an MLflow run."""
-        import mlflow
-
-        run_id = self.model_version_info.run_id
-        artifact_uri = f"runs:/{run_id}/{artifact_name}"
-        local_path = mlflow.artifacts.download_artifacts(artifact_uri=artifact_uri)
-        return _load_pickle_with_compat(Path(local_path))
-
-    def _download_run_metadata(self) -> Dict:
-        """Download metadata.json from an MLflow run."""
-        import mlflow
-
-        run_id = self.model_version_info.run_id
-        artifact_uri = f"runs:/{run_id}/metadata.json"
-        local_path = mlflow.artifacts.download_artifacts(artifact_uri=artifact_uri)
-        with open(local_path, "r") as f:
-            return json.load(f)
+            raise RuntimeError(f"Failed to load production artifacts from {s3_base}: {exc}")
 
     def _load_from_local(self):
         """Load model, preprocessor, and metadata from local production directory."""
