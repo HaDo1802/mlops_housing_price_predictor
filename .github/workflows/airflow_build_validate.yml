@@ -28,6 +28,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Create CI env file for compose validation
+        run: |
+          cat > .env <<'EOF'
+          AIRFLOW_FERNET_KEY=ci_dummy_fernet_key_12345678901234567890=
+          POSTGRES_USER=airflow
+          POSTGRES_PASSWORD=airflow
+          POSTGRES_AIRFLOW_DB=airflow
+          SUPABASE_DB_HOST=ci.supabase.local
+          SUPABASE_DB_PORT=5432
+          SUPABASE_DB_NAME=postgres
+          SUPABASE_DB_USER=postgres
+          SUPABASE_DB_PASSWORD=dummy_password
+          SUPABASE_DB_SSLMODE=require
+          MLFLOW_TRACKING_URI=postgresql+psycopg2://postgres:dummy_password@ci.supabase.local:5432/postgres?sslmode=require
+          MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://ci-placeholder-bucket/mlruns
+          AWS_ACCESS_KEY_ID=dummy_access_key
+          AWS_SECRET_ACCESS_KEY=dummy_secret_key
+          AWS_DEFAULT_REGION=us-west-1
+          ARTIFACT_BUCKET=ci-placeholder-bucket
+          EOF
+
       - name: Validate docker-compose config
         run: docker compose config -q
 
