@@ -4,6 +4,7 @@ on:
   push:
     branches: ["master"]
     paths:
+      - ".github/workflows/**"
       - "dags/**"
       - "Dockerfile.airflow"
       - "docker-compose.yml"
@@ -11,6 +12,7 @@ on:
   pull_request:
     branches: ["master"]
     paths:
+      - ".github/workflows/**"
       - "dags/**"
       - "Dockerfile.airflow"
       - "docker-compose.yml"
