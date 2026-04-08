@@ -1,0 +1,98 @@
+name: manual-mlops-ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Which controlled MLOps operation to run"
+        required: true
+        default: "train"
+        type: choice
+        options:
+          - train
+          - promote
+          - sync
+      model_name:
+        description: "Registered MLflow model name"
+        required: true
+        default: "housing_price_predictor"
+        type: string
+      run_id:
+        description: "Required only for promote"
+        required: false
+        type: string
+      stage:
+        description: "Target registry stage for promote"
+        required: true
+        default: "Production"
+        type: choice
+        options:
+          - Production
+          - Staging
+          - Archived
+
+env:
+  PYTHON_VERSION: "3.12"
+  PYTHONPATH: ".:src"
+  MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+  MLFLOW_DEFAULT_ARTIFACT_ROOT: ${{ secrets.MLFLOW_DEFAULT_ARTIFACT_ROOT }}
+  SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+  SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+  SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+  SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+  SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+  SUPABASE_DB_SSLMODE: ${{ secrets.SUPABASE_DB_SSLMODE }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }}
+
+jobs:
+  mlops-operation:
+    name: Run Manual MLOps Operation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install setuptools wheel
+          python -m pip install -r requirements.txt
+          python -m pip install -e .
+
+      - name: Run selected operation
+        run: |
+          case "${{ github.event.inputs.operation }}" in
+            train)
+              python scripts/train.py
+              ;;
+            promote)
+              if [ -z "${{ github.event.inputs.run_id }}" ]; then
+                echo "run_id is required for promote" >&2
+                exit 1
+              fi
+              python scripts/promote.py \
+                --model-name "${{ github.event.inputs.model_name }}" \
+                --run-id "${{ github.event.inputs.run_id }}" \
+                --stage "${{ github.event.inputs.stage }}"
+              ;;
+            sync)
+              python scripts/sync_production_artifacts.py \
+                --model-name "${{ github.event.inputs.model_name }}"
+              ;;
+            *)
+              echo "Unsupported operation" >&2
+              exit 1
+              ;;
+          esac

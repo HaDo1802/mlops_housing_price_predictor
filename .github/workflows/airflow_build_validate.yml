@@ -1,0 +1,33 @@
+name: airflow-build-validate
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - "dags/**"
+      - "Dockerfile.airflow"
+      - "docker-compose.yml"
+      - "requirements-airflow.txt"
+  pull_request:
+    branches: ["master"]
+    paths:
+      - "dags/**"
+      - "Dockerfile.airflow"
+      - "docker-compose.yml"
+      - "requirements-airflow.txt"
+  workflow_dispatch:
+
+jobs:
+  build-and-validate-airflow:
+    name: Build Airflow Image And Validate Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose config
+        run: docker compose config -q
+
+      - name: Build Airflow image
+        run: docker build -f Dockerfile.airflow -t housing-price-predictor-airflow-ci .

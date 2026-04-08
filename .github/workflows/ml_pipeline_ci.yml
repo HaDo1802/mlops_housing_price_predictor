@@ -1,20 +1,39 @@
 name: ml-pipeline-ci
 
-# on:
-#   push:
-#     branches: ["main", "master"]
-#   pull_request:
-#     branches: ["main", "master"]
 on:
+  push:
+    branches: ["master"]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - "serving/**"
+      - "dags/**"
+      - "conf/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "Makefile"
+  pull_request:
+    branches: ["master"]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - "serving/**"
+      - "dags/**"
+      - "conf/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "Makefile"
   workflow_dispatch:
-    
+
 env:
   PYTHON_VERSION: "3.12"
   PYTHONPATH: ".:src"
 
 jobs:
   quality-and-tests:
-    name: Install, Format Check, Lint, Test
+    name: Format, Lint, Test, Parse
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -48,3 +67,12 @@ jobs:
       - name: Run tests
         run: |
           python -m pytest tests -v --maxfail=1
+
+      - name: Parse DAGs and key entrypoints
+        run: |
+          python -m py_compile dags/*.py
+          python -m py_compile scripts/*.py
+          python -m py_compile src/predictor/*.py
+          python -m py_compile serving/api/*.py
+          python -m py_compile serving/api/routers/*.py
+          python -m py_compile serving/app/streamlit_app.py
