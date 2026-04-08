@@ -1,13 +1,12 @@
 [![ml-pipeline-ci](https://github.com/HaDo1802/housing_price_predictor/actions/workflows/ml_pipeline_ci.yml/badge.svg)](https://github.com/HaDo1802/housing_price_predictor/actions/workflows/ml_pipeline_ci.yml)
 
-# Housing Price Predictor: End-to-End MLOps Project (Currently Under Maintainance Work)
+# Housing Price Predictor: End-to-End MLOps Project 
 
 ![Project Cover](image/architecture.png)
 
 
-The system is currently under infrastructure refactoring.
-- Streamlit UI: deploy from `serving/app/streamlit_app.py`
-- FastAPI remains in the repo for future deployment, but the current recommended demo path is Streamlit Cloud + S3-backed model artifacts
+- Streamlit UI: [`vegas-housing-price-predictor`](https://vegas-house-price-predict.streamlit.app/)
+
 
 Transforming the classic **beginner house price prediction** problem into a **production-grade machine learning project** that implements practical MLOps patterns across the entire lifecycle:
 - config-oriented management using config.ymal 
@@ -15,7 +14,7 @@ Transforming the classic **beginner house price prediction** problem into a **pr
 - reproducible training and evaluation
 - experiment tracking and model governance with MLflow
 - conditional promotion to production
-- FastAPI/UI serving 
+- FastAPI for local/backend development and Streamlit for deployment
 - drift checks (PSI-based)
 - CI quality gates
 
@@ -156,16 +155,17 @@ Why this pattern matters:
 
 ### 6) Artifact Strategy for Serving Reliability
 
-Implemented in [promote.py](scripts/promote.py) and [predict.py](src/predictor/predict.py):
+Implemented in [sync_production_artifacts.py](scripts/sync_production_artifacts.py), [artifact_store.py](src/predictor/artifact_store.py), and [predict.py](src/predictor/predict.py):
 
-- save local production artifacts (`model.pkl`, `preprocessor.pkl`, `metadata.json`, `config.yaml`)
-- online inference tries MLflow registry first
-- fallback to S3 production artifacts, then local production artifacts when MLflow is unavailable
+- sync the current Production model into a stable artifact snapshot
+- publish the production snapshot to S3
+- production inference loads from the S3 production snapshot
+- explicit local artifact loading is kept only for tests and local debugging
 
 Why this pattern matters:
 
-- supports multiple runtime environments (cloud/serverless/local)
-- improves resilience during external dependency outages
+- keeps serving decoupled from MLflow runtime availability
+- gives Streamlit and future APIs one stable production artifact source
 
 ### 7) Online Serving Interface
 
@@ -190,6 +190,13 @@ Why this pattern matters:
 
 - clean separation between model internals and consumer-facing interfaces
 - easier integration with product frontends and external services
+
+Current serving mode:
+
+- [streamlit_app.py](serving/app/streamlit_app.py) is the primary deployed interface
+- FastAPI remains in the repo so other engineers can still run `uvicorn serving.api.main:app --reload` locally and build their own API-based integrations
+- both Streamlit and FastAPI use the same inference layer in [predict.py](src/predictor/predict.py)
+- production inference expects S3 artifact configuration via `ARTIFACT_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION`
 
 ### 8) Post-Deployment Drift Monitoring
 
@@ -223,16 +230,16 @@ Why this pattern matters:
 
 ```text
 Raw data
-  -> feature selection from config
+  -> schema-driven feature contract
   -> train/val/test split
   -> fit preprocessor on train only
   -> train model
   -> evaluate on val/test
   -> log run + artifacts to MLflow
-  -> gate candidate vs Production metric
+  -> select candidate run
   -> register/promote (if pass)
-  -> sync production artifacts locally
-  -> serve via API/UI
+  -> sync Production artifacts to local + S3
+  -> serve via Streamlit/API
   -> monitor drift
 ```
 
@@ -293,11 +300,22 @@ Open `http://localhost:5000`.
 make api
 ```
 
+FastAPI is kept for local development and future integrations. With the current production inference setup, make sure these environment variables are available before starting the API:
+
+```bash
+export ARTIFACT_BUCKET=your-bucket-name
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_DEFAULT_REGION=us-west-1
+```
+
 ### 6) Run Streamlit UI
 
 ```bash
 make ui
 ```
+
+This is the primary deployed interface. Streamlit also expects the same S3 artifact environment variables when running against the production model snapshot.
 
 ## Pipeline Scripts
 
@@ -343,17 +361,19 @@ Services:
 - FastAPI on `8000`
 - Streamlit on `8501`
 
-`models/production` is mounted read-only into containers to keep serving artifacts explicit and immutable at runtime.
+`models/production` is mounted read-only into containers for local artifact workflows. The primary production serving path loads from the S3 production snapshot.
 
 ## Testing Strategy
 
 Tests currently include:
 
-- integration import checks for training/inference pipelines
-- unit tests for data split logic
+- training-to-inference contract checks
+- unit tests for config loading
+- unit tests for data cleaning and training-column selection
 - unit tests for preprocessor fit/transform behavior
+- unit tests for registry governance
+- unit tests for production artifact sync
 - unit tests for regression metric outputs
-- unit tests for drift/monitoring utilities
 
 Run:
 

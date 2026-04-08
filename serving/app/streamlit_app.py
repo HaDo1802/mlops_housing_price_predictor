@@ -452,58 +452,6 @@ def display_prediction_results(
 
             st.plotly_chart(fig, use_container_width=True)
 
-    # Price range visualization
-    st.markdown("### 📈 Price Range Visualization")
-
-    fig = go.Figure()
-
-    # Add confidence interval
-    fig.add_trace(
-        go.Scatter(
-            x=["Lower Bound", "Prediction", "Upper Bound"],
-            y=[lower, prediction, upper],
-            mode="markers+lines",
-            marker=dict(size=[15, 25, 15], color=["#ff7f0e", "#1f77b4", "#ff7f0e"]),
-            line=dict(color="#1f77b4", width=2),
-            name="Price Range",
-        )
-    )
-
-    # Add shaded area for confidence interval
-    fig.add_trace(
-        go.Scatter(
-            x=["Lower Bound", "Prediction", "Upper Bound"],
-            y=[lower, lower, lower],
-            fill=None,
-            mode="lines",
-            line=dict(color="rgba(0,0,0,0)"),
-            showlegend=False,
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=["Lower Bound", "Prediction", "Upper Bound"],
-            y=[upper, upper, upper],
-            fill="tonexty",
-            mode="lines",
-            line=dict(color="rgba(0,0,0,0)"),
-            fillcolor="rgba(31, 119, 180, 0.2)",
-            name="95% Confidence Interval",
-        )
-    )
-
-    fig.update_layout(
-        title="Predicted Price with Confidence Interval",
-        xaxis_title="",
-        yaxis_title="Price ($)",
-        height=400,
-        hovermode="x unified",
-        yaxis=dict(tickformat="$,.0f"),
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
     # Add interpretation
     st.markdown(
         f"""
