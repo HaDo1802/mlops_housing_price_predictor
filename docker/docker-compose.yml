@@ -10,7 +10,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ../models/production:/app/models/production:ro
       - ../logs:/app/logs
     environment:
       LOG_LEVEL: info
@@ -25,9 +24,7 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ../models/production:/app/models/production:ro
       - ../logs:/app/logs
     environment:
-      API_BASE_URL: http://fastapi:8000
       LOG_LEVEL: info
     restart: unless-stopped

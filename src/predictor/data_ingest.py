@@ -2,17 +2,13 @@
 
 import logging
 import os
-from pathlib import Path
 
 import pandas as pd
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 
 from predictor.config import MLConfig
 from predictor.schema import DROP_COLUMNS, MODEL_FEATURES, NUMERIC_FEATURES
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 

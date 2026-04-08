@@ -3,7 +3,7 @@
 #   2. Generate fernet key:
 #        python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 #   3. Create required local dirs:
-#        mkdir -p logs plugins data/snapshot models/production mlruns
+#        mkdir -p logs plugins data/snapshot models/production
 #   4. Build and start:
 #        docker compose -f docker/docker-compose.airflow.yml --env-file .env up --build -d
 #   5. Open http://localhost:8080  (first start takes ~60s for init to finish)
@@ -39,7 +39,12 @@ x-airflow-common: &airflow-common
 
     PYTHONPATH: /opt/airflow/project:/opt/airflow/project/src
 
-    MLFLOW_TRACKING_URI: sqlite:////opt/airflow/project/mlflow_airflow.db
+    MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+    MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT}
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+    ARTIFACT_BUCKET: ${ARTIFACT_BUCKET}
   volumes:
     - ../dags:/opt/airflow/dags
     - ../logs:/opt/airflow/logs
@@ -47,7 +52,6 @@ x-airflow-common: &airflow-common
     - ../data:/opt/airflow/project/data
     - ../models:/opt/airflow/project/models
     - ../conf:/opt/airflow/project/conf:ro
-    - ../mlruns:/opt/airflow/project/mlruns
     - ..:/opt/airflow/project
   depends_on:
     postgres:

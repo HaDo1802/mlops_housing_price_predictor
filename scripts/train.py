@@ -2,8 +2,13 @@
 
 import json
 import logging
+from pathlib import Path
 
+from dotenv import load_dotenv
 from predictor.training_pipeline import TrainingPipeline
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 def _to_builtin(value):

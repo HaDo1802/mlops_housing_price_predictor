@@ -1,20 +1,8 @@
 data:
-  raw_data_path: data/raw/data_master.csv
   target_column: price
   test_size: 0.2
   val_size: 0.0
   random_state: 42
-features:
-  numeric:
-  - bedrooms
-  - bathrooms
-  - living_area
-  - latitude
-  - longitude
-  - normalized_lot_area_value
-  categorical:
-  - property_type
-  - vegas_district
 preprocessing:
   handle_missing: mean
   handle_outliers: true
@@ -39,7 +27,7 @@ model:
   optimize_metric: r2
 training:
   experiment_name: house_price_prediction
-  run_name: hgb_v2_new_features
+  run_name: hgb_v1_new_features
   registry_model_name: housing_price_predictor
   log_metrics: true
   save_artifacts: true

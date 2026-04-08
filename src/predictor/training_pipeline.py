@@ -120,7 +120,7 @@ class TrainingPipeline:
 
             self._log_step("FIT MODEL")
             if track:
-                mlflow.sklearn.autolog(disable=False)
+                mlflow.sklearn.autolog(log_models=False)
             self.model = TrainerFactory.get_model(self.config)
             self.model.fit(self.X_train_transformed, y_train.to_numpy())
 
@@ -130,6 +130,7 @@ class TrainingPipeline:
 
             if track:
                 self._log_step("LOG ARTIFACTS")
+                mlflow.sklearn.log_model(self.model, artifact_path="model")
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     tmp_path = Path(tmp_dir)
                     self.preprocessor.save(tmp_path / "preprocessor.pkl")

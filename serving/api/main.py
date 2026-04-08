@@ -58,39 +58,23 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     model_name = "housing_price_predictor"
-    stage_candidates = ["Production", "Staging"]
     app.state.model_load_error = None
 
-    for stage in stage_candidates:
-        try:
-            app.state.inference_pipeline = InferencePipeline(
-                model_name=model_name, stage=stage
-            )
-            bucket = _mask_bucket_name(os.getenv("ARTIFACT_BUCKET"))
-            model_type = app.state.inference_pipeline.metadata.get("model_type")
-            logger.info(
-                "Inference pipeline loaded (model=%s, stage=%s, source=%s, bucket=%s, model_type=%s)",
-                model_name,
-                stage,
-                app.state.inference_pipeline._loaded_from,
-                bucket,
-                model_type,
-            )
-            return
-        except Exception as exc:
-            app.state.model_load_error = str(exc)
-            logger.warning(
-                "Failed to load pipeline (model=%s, stage=%s): %s",
-                model_name,
-                stage,
-                exc,
-            )
-
-    app.state.inference_pipeline = None
-    logger.error(
-        "Failed to load inference pipeline for all stage candidates: %s",
-        stage_candidates,
-    )
+    try:
+        app.state.inference_pipeline = InferencePipeline(model_name=model_name)
+        bucket = _mask_bucket_name(os.getenv("ARTIFACT_BUCKET"))
+        model_type = app.state.inference_pipeline.metadata.get("model_type")
+        logger.info(
+            "Inference pipeline loaded (model=%s, source=%s, bucket=%s, model_type=%s)",
+            model_name,
+            app.state.inference_pipeline._loaded_from,
+            bucket,
+            model_type,
+        )
+    except Exception as exc:
+        app.state.model_load_error = str(exc)
+        app.state.inference_pipeline = None
+        logger.error("Failed to load inference pipeline (model=%s): %s", model_name, exc)
 
 
 @app.exception_handler(Exception)
