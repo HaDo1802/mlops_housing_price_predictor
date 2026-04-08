@@ -1,0 +1,23 @@
+FROM apache/airflow:2.9.2-python3.12
+
+ARG AIRFLOW_VERSION=2.9.2
+ARG PYTHON_VERSION=3.12
+ARG CONSTRAINT_URL=https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt
+
+# Python 3.12 is used to align with the project baseline
+# (pyproject.toml requires-python >=3.10) and current requirements.txt.
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev git \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+COPY requirements-airflow.txt /tmp/requirements-airflow.txt
+# Install project runtime dependencies without Airflow constraints because
+# Airflow 2.9.2 pins numpy<2 in its constraints while this project uses numpy 2.x.
+# Airflow itself is already pinned by the base image.
+RUN pip install --no-cache-dir -r /tmp/requirements-airflow.txt
+
+COPY --chown=airflow:root . /opt/airflow/project
+RUN pip install --no-cache-dir -e /opt/airflow/project \
+    --constraint "${CONSTRAINT_URL}"

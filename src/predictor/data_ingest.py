@@ -48,7 +48,9 @@ class DataIngestor:
             WHERE price IS NOT NULL
         """
         with engine.connect() as conn:
-            return pd.read_sql_query(text(query), conn)
+            result = conn.execute(text(query))
+            rows = result.mappings().all()
+        return pd.DataFrame(rows)
 
     def clean(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply business cleaning rules to the raw dataset."""

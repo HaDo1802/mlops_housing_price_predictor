@@ -1,15 +1,4 @@
-"""Daily data ingestion DAG with drift gate and conditional retraining trigger.
-
-This DAG ingests latest housing data, runs a temporary drift bypass gate,
-and conditionally triggers the retraining DAG.
-
-Drift logic is intentionally bypassed while the dataset is small.
-To re-enable true drift checks, uncomment the disabled PSI block in
-`check_drift_task` once the dataset exceeds ~5000 rows.
-"""
-
-# Required env vars: SUPABASE_DB_HOST, SUPABASE_DB_USER,
-#                    SUPABASE_DB_PASSWORD, SUPABASE_DB_PORT (optional)
+"""Daily ingestion DAG with drift gate and conditional training trigger."""
 
 import logging
 import os
@@ -27,14 +16,15 @@ for p in [str(PROJECT_ROOT), str(PROJECT_ROOT / "src")]:
 
 def ingest_data_task(**context) -> None:
     from airflow.exceptions import AirflowSkipException
-    from data.query_data_from_supabase import load_dashboard_df
+    from predictor.config import ConfigManager
+    from predictor.data_ingest import DataIngestor
 
-    required_env_vars = [
+    required = [
         "SUPABASE_DB_HOST",
         "SUPABASE_DB_USER",
         "SUPABASE_DB_PASSWORD",
     ]
-    missing = [name for name in required_env_vars if not os.getenv(name)]
+    missing = [name for name in required if not os.getenv(name)]
     if missing:
         raise AirflowSkipException(
             "Skipping ingestion because required Supabase env vars are missing: "
@@ -44,7 +34,9 @@ def ingest_data_task(**context) -> None:
     output_path = PROJECT_ROOT / "data" / "raw" / "data_master.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    df = load_dashboard_df()
+    config = ConfigManager(str(PROJECT_ROOT / "conf" / "config.yaml")).config
+    ingestor = DataIngestor(config)
+    df = ingestor.fetch_data()
     df.to_csv(output_path, index=False)
 
     row_count = int(len(df))
@@ -54,43 +46,41 @@ def ingest_data_task(**context) -> None:
 
 def check_drift_task(**context) -> None:
     import pandas as pd
+    from predictor.drift import PSI_THRESHOLD_MODERATE, run_drift_check
 
-    # df = pd.read_csv(PROJECT_ROOT / "data" / "raw" / "data_master.csv")
+    dataset_path = PROJECT_ROOT / "data" / "raw" / "data_master.csv"
+    reference_path = PROJECT_ROOT / "data" / "snapshots" / "drift_reference.json"
 
-    # ----------------------------------------------------------------
-    # DRIFT LOGIC DISABLED — dataset too small for PSI to be reliable.
-    # Uncomment this block once the dataset grows beyond ~5000 rows.
-    # ----------------------------------------------------------------
-    # result = run_drift_check(
-    #     current_df=df,
-    #     reference_path=Path(DEFAULT_REFERENCE_PATH),
-    #     psi_threshold=PSI_THRESHOLD_MODERATE,
-    # )
-    # should_retrain = result["should_retrain"]
-    # drift_summary  = result
-    # ----------------------------------------------------------------
-
-    should_retrain = True
-    drift_summary = {
-        "psi": None,
-        "drift_level": "bypassed",
-        "should_retrain": True,
-        "reason": "Drift detection disabled — forced trigger until dataset is large enough.",
-    }
-
-    logging.warning(
-        "Drift check bypassed — always triggering retraining until dataset is large enough for PSI to be reliable."
-    )
+    try:
+        current_df = pd.read_csv(dataset_path)
+        result = run_drift_check(
+            current_df=current_df,
+            reference_path=reference_path,
+            psi_threshold=PSI_THRESHOLD_MODERATE,
+        )
+        should_retrain = bool(result.get("should_retrain", False))
+        drift_summary = result
+        logging.info(
+            "Drift check complete. should_retrain=%s summary=%s",
+            should_retrain,
+            drift_summary,
+        )
+    except Exception as exc:
+        should_retrain = False
+        drift_summary = {
+            "should_retrain": False,
+            "reason": f"Drift check failed: {exc}",
+        }
+        logging.warning("Drift check failed. Retraining skipped. Error: %s", exc)
 
     context["ti"].xcom_push(key="should_retrain", value=should_retrain)
     context["ti"].xcom_push(key="drift_summary", value=drift_summary)
 
 
 def decide_retrain_task(**context) -> bool:
-    should_retrain = context["ti"].xcom_pull(
-        task_ids="check_drift", key="should_retrain"
+    return bool(
+        context["ti"].xcom_pull(task_ids="check_drift", key="should_retrain")
     )
-    return should_retrain
 
 
 def build_data_ingestion_dag():
@@ -109,7 +99,7 @@ def build_data_ingestion_dag():
         start_date=datetime(2025, 1, 1),
         schedule="@daily",
         catchup=False,
-        tags=["mlops", "predictor", "ingestion"],
+        tags=["mlops", "ingestion"],
         render_template_as_native_obj=True,
     ) as dag:
         ingest_data = PythonOperator(
@@ -127,11 +117,10 @@ def build_data_ingestion_dag():
             python_callable=decide_retrain_task,
         )
 
-        trigger_retraining = TriggerDagRunOperator(
-            task_id="trigger_retraining",
-            trigger_dag_id="retraining_dag",
+        trigger_training = TriggerDagRunOperator(
+            task_id="trigger_training",
+            trigger_dag_id="train_candidate_dag",
             wait_for_completion=False,
-            reset_dag_run=True,
             conf={
                 "dataset_path": str(PROJECT_ROOT / "data" / "raw" / "data_master.csv"),
                 "drift_summary": "{{ ti.xcom_pull(task_ids='check_drift', key='drift_summary') }}",
@@ -139,7 +128,7 @@ def build_data_ingestion_dag():
             },
         )
 
-        ingest_data >> check_drift >> decide_retrain >> trigger_retraining
+        ingest_data >> check_drift >> decide_retrain >> trigger_training
 
     return dag
 

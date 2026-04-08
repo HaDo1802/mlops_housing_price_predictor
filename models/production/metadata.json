@@ -53,7 +53,7 @@
     ],
     "relative_error_quantiles_by_segment": [
       0.24518378008285518,
-      0.3511801512715621,
+      0.3511801512715619,
       0.2500635958018682,
       0.312822831332614,
       0.5556286263780003
@@ -67,9 +67,9 @@
   "val_size": 0,
   "test_size": 476,
   "registry_model_name": "housing_price_predictor",
-  "registry_version": "1",
-  "run_id": "5b752327a06f4db5bd05e27a99532de4",
+  "registry_version": "2",
+  "run_id": "05c2971fe3c04ced89dee6c63ff63afb",
   "promotion_stage": "Production",
-  "promotion_timestamp": "2026-04-08T18:49:53Z",
+  "promotion_timestamp": "2026-04-08T20:31:02Z",
   "artifact_delivery": "local_production_snapshot"
 }
